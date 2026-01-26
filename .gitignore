@@ -6,7 +6,8 @@ __pycache__/
 venv/
 *.egg-info/
 
-# Data outputs
+# Data
+data/papers/
 data/images/
 data/results/
 
