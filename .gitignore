@@ -10,6 +10,7 @@ venv/
 data/papers/
 data/images/
 data/results/
+data/benchmark/
 
 # Models (large files)
 models/*.pt
