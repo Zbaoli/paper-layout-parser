@@ -1,0 +1,117 @@
+# YOLOv8 PDF Document Layout Detection Configuration
+
+# Model settings
+model:
+  # Model type: "doclayout" or "yolov8"
+  type: "doclayout"
+
+  # DocLayout-YOLO model path (will auto-download from HuggingFace)
+  doclayout_model: "juliozhao/DocLayout-YOLO-DocStructBench"
+
+  # YOLOv8 DocLayNet model path
+  yolov8_model: "models/yolov8-doclaynet.pt"
+
+  # Confidence threshold for detections
+  confidence_threshold: 0.25
+
+  # IOU threshold for NMS
+  iou_threshold: 0.45
+
+# Device settings
+device:
+  # Use MPS for Mac M-series chips, "cpu" for CPU only
+  type: "mps"
+
+# PDF conversion settings
+pdf:
+  # DPI for PDF to image conversion
+  dpi: 200
+
+  # Output image format
+  format: "png"
+
+# Path settings
+paths:
+  # Input PDF directory
+  input_dir: "data/papers"
+
+  # Converted images directory
+  images_dir: "data/images"
+
+  # Results directory
+  results_dir: "data/results"
+
+  # JSON results subdirectory
+  json_dir: "data/results/json"
+
+  # Visualization subdirectory
+  visualizations_dir: "data/results/visualizations"
+
+  # Models directory
+  models_dir: "models"
+
+# Visualization settings
+visualization:
+  # Enable visualization output
+  enabled: true
+
+  # Bounding box line thickness
+  line_thickness: 2
+
+  # Font scale for labels
+  font_scale: 0.6
+
+  # Show confidence scores
+  show_confidence: true
+
+# DocLayout-YOLO DocStructBench classes (10 classes)
+# Model automatically detects class names from the model file
+doclayout_classes:
+  0: "Title"
+  1: "Plain-Text"
+  2: "Abandon"
+  3: "Figure"
+  4: "Figure-Caption"
+  5: "Table"
+  6: "Table-Caption"
+  7: "Table-Footnote"
+  8: "Isolate-Formula"
+  9: "Formula-Caption"
+
+# DocLayNet classes (11 classes) - for YOLOv8 DocLayNet models
+doclaynet_classes:
+  0: "Caption"
+  1: "Footnote"
+  2: "Formula"
+  3: "List-item"
+  4: "Page-footer"
+  5: "Page-header"
+  6: "Picture"
+  7: "Section-header"
+  8: "Table"
+  9: "Text"
+  10: "Title"
+
+# Class colors (BGR format for OpenCV)
+class_colors:
+  # DocLayout-YOLO classes
+  Title: [128, 0, 128]        # Purple
+  Plain-Text: [0, 180, 0]     # Dark Green
+  Abandon: [64, 64, 64]       # Dark Gray
+  Figure: [0, 255, 0]         # Green
+  Figure-Caption: [255, 200, 0] # Light Orange
+  Table: [0, 0, 255]          # Blue
+  Table-Caption: [0, 100, 255] # Light Blue
+  Table-Footnote: [128, 128, 128] # Gray
+  Isolate-Formula: [255, 0, 255]  # Magenta
+  Formula-Caption: [200, 0, 200]  # Dark Magenta
+  # DocLayNet classes
+  Caption: [255, 165, 0]      # Orange
+  Footnote: [128, 128, 128]   # Gray
+  Formula: [255, 0, 255]      # Magenta
+  List-item: [0, 255, 255]    # Cyan
+  Page-footer: [192, 192, 192] # Silver
+  Page-header: [192, 192, 192] # Silver
+  Picture: [0, 255, 0]        # Green
+  Section-header: [255, 0, 0] # Red
+  Text: [255, 255, 0]         # Yellow
