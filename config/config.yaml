@@ -57,6 +57,9 @@ paths:
   # Extractions directory
   extractions_dir: "data/results/extractions"
 
+  # Benchmark data directory
+  benchmark_dir: "data/benchmark"
+
 # Extraction settings
 extraction:
   # Padding in pixels to add around cropped images
@@ -68,6 +71,20 @@ extraction:
 
   # Minimum horizontal overlap ratio for caption matching (0-1)
   min_horizontal_overlap: 0.3
+
+# Benchmark settings
+benchmark:
+  # Default dataset for evaluation
+  dataset: "doclaynet"
+
+  # Default split for evaluation
+  split: "test"
+
+  # IoU threshold for matching predictions to ground truth
+  iou_threshold: 0.5
+
+  # Dataset paths
+  doclaynet_path: "data/benchmark/doclaynet"
 
 # Visualization settings
 visualization:
