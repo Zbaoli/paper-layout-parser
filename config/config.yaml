@@ -8,8 +8,12 @@ model:
   # DocLayout-YOLO model path (will auto-download from HuggingFace)
   doclayout_model: "juliozhao/DocLayout-YOLO-DocStructBench"
 
-  # YOLOv8 DocLayNet model path
-  yolov8_model: "models/yolov8-doclaynet.pt"
+  # YOLOv8 DocLayNet model (HuggingFace repo ID or local path)
+  # Available repos:
+  #   - hantian/yolo-doclaynet (variants: n, s, m)
+  #   - DILHTWD/documentlayoutsegmentation_YOLOv8_ondoclaynet (high accuracy)
+  yolov8_model: "hantian/yolo-doclaynet"
+  yolov8_variant: "n"  # Model variant: n (nano), s (small), m (medium)
 
   # Confidence threshold for detections
   confidence_threshold: 0.25

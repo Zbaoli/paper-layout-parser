@@ -212,29 +212,91 @@ class DocLayoutDetector(BaseLayoutDetector):
 class YOLOv8LayoutDetector(BaseLayoutDetector):
     """Layout detector using ultralytics YOLOv8 model."""
 
+    # HuggingFace repos for YOLOv8 DocLayNet models
+    HF_REPOS = {
+        "hantian": {
+            "repo_id": "hantian/yolo-doclaynet",
+            "files": {
+                "n": "yolov8n-doclaynet.pt",
+                "s": "yolov8s-doclaynet.pt",
+                "m": "yolov8m-doclaynet.pt",
+            },
+            "default": "n",
+        },
+        "DILHTWD": {
+            "repo_id": "DILHTWD/documentlayoutsegmentation_YOLOv8_ondoclaynet",
+            "files": {
+                "default": "yolov8x-doclaynet.pt",
+            },
+            "default": "default",
+        },
+    }
+
     def __init__(
         self,
-        model_path: str = "models/yolov8-doclaynet.pt",
+        model_path: str = "hantian/yolo-doclaynet",
         device: str = "mps",
         confidence_threshold: float = 0.25,
         iou_threshold: float = 0.45,
+        model_variant: str = "n",  # n, s, m for hantian repo
     ):
+        self.model_variant = model_variant
         super().__init__(model_path, device, confidence_threshold, iou_threshold)
         self.load_model()
 
+    def _download_from_huggingface(self, repo_id: str, filename: str) -> str:
+        """Download model from HuggingFace Hub."""
+        try:
+            from huggingface_hub import hf_hub_download
+
+            print(f"Downloading {filename} from {repo_id}...")
+            model_file = hf_hub_download(
+                repo_id=repo_id,
+                filename=filename,
+            )
+            print(f"Model downloaded to: {model_file}")
+            return model_file
+        except Exception as e:
+            raise RuntimeError(f"Failed to download model from HuggingFace: {e}") from e
+
     def load_model(self):
-        """Load the YOLOv8 model."""
+        """Load the YOLOv8 model, downloading from HuggingFace if necessary."""
         try:
             from ultralytics import YOLO
 
-            # Check if model file exists
-            if not os.path.exists(self.model_path):
-                print(f"Warning: Model file not found at {self.model_path}")
-                print("Please download a YOLOv8 DocLayNet model and place it there.")
-                print("Falling back to base YOLOv8n model for testing...")
-                self.model = YOLO("yolov8n.pt")
+            model_file = None
+
+            # Check if model_path is a HuggingFace repo ID (contains /)
+            if "/" in self.model_path and not os.path.exists(self.model_path):
+                # Parse repo ID to determine which HF repo to use
+                repo_parts = self.model_path.split("/")
+                repo_owner = repo_parts[0]
+
+                if repo_owner in self.HF_REPOS:
+                    repo_info = self.HF_REPOS[repo_owner]
+                    repo_id = repo_info["repo_id"]
+                    variant = self.model_variant if self.model_variant in repo_info["files"] else repo_info["default"]
+                    filename = repo_info["files"][variant]
+                    model_file = self._download_from_huggingface(repo_id, filename)
+                else:
+                    # Try to download directly using the provided path as repo_id
+                    # Assume default model filename pattern
+                    model_file = self._download_from_huggingface(
+                        self.model_path,
+                        f"yolov8{self.model_variant}-doclaynet.pt"
+                    )
+            elif os.path.exists(self.model_path):
+                # Use local model file
+                model_file = self.model_path
             else:
-                self.model = YOLO(self.model_path)
+                # Model file not found locally, try to download from default HF repo
+                print(f"Model not found at {self.model_path}, downloading from HuggingFace...")
+                repo_info = self.HF_REPOS["hantian"]
+                variant = self.model_variant if self.model_variant in repo_info["files"] else repo_info["default"]
+                filename = repo_info["files"][variant]
+                model_file = self._download_from_huggingface(repo_info["repo_id"], filename)
+
+            self.model = YOLO(model_file)
 
             # Use the model's own class names if available, otherwise use DocLayNet defaults
             if hasattr(self.model, 'names') and self.model.names:
@@ -245,7 +307,7 @@ class YOLOv8LayoutDetector(BaseLayoutDetector):
             else:
                 self.class_names = DOCLAYNET_CLASS_NAMES.copy()
 
-            print(f"YOLOv8 model loaded from: {self.model_path}")
+            print(f"YOLOv8 model loaded: {model_file}")
             print(f"  Classes: {list(self.class_names.values())}")
 
         except ImportError as e:
@@ -300,16 +362,18 @@ def create_detector(
     device: str = "mps",
     confidence_threshold: float = 0.25,
     iou_threshold: float = 0.45,
+    model_variant: str = "n",
 ) -> BaseLayoutDetector:
     """
     Factory function to create a layout detector.
 
     Args:
         model_type: Type of model ("doclayout" or "yolov8")
-        model_path: Path to the model file (optional)
+        model_path: Path to the model file (optional, can be HuggingFace repo ID)
         device: Device to run inference on ("mps", "cpu", "cuda")
         confidence_threshold: Minimum confidence for detections
         iou_threshold: IOU threshold for NMS
+        model_variant: For YOLOv8, the model variant ("n", "s", "m" for hantian repo)
 
     Returns:
         A layout detector instance
@@ -323,12 +387,13 @@ def create_detector(
             iou_threshold=iou_threshold,
         )
     elif model_type == "yolov8":
-        default_path = "models/yolov8-doclaynet.pt"
+        default_path = "hantian/yolo-doclaynet"
         return YOLOv8LayoutDetector(
             model_path=model_path or default_path,
             device=device,
             confidence_threshold=confidence_threshold,
             iou_threshold=iou_threshold,
+            model_variant=model_variant,
         )
     else:
         raise ValueError(f"Unknown model type: {model_type}. Use 'doclayout' or 'yolov8'")
