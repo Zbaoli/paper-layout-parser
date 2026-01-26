@@ -20,6 +20,7 @@ from src.pdf_converter import PDFConverter
 from src.layout_detector import create_detector, Detection
 from src.result_processor import ResultProcessor
 from src.visualizer import Visualizer
+from src.figure_table_extractor import FigureTableExtractor
 
 
 def load_config(config_path: str = "config/config.yaml") -> dict:
@@ -37,6 +38,7 @@ def process_pdf(
     detector,
     processor: ResultProcessor,
     visualizer: Optional[Visualizer],
+    extractor: Optional[FigureTableExtractor],
     images_dir: str,
     model_type: str,
 ) -> dict:
@@ -49,6 +51,7 @@ def process_pdf(
         detector: Layout detector instance
         processor: ResultProcessor instance
         visualizer: Optional Visualizer instance
+        extractor: Optional FigureTableExtractor instance
         images_dir: Directory to save converted images
         model_type: Type of model used
 
@@ -99,6 +102,19 @@ def process_pdf(
         print(f"  Generating visualizations...")
         viz_paths = visualizer.visualize_document(pdf_name, page_results)
         print(f"  Saved {len(viz_paths)} visualization images")
+
+    # Step 6: Extract figures and tables (if enabled)
+    if extractor:
+        print(f"  Extracting figures and tables...")
+        extraction_result = extractor.extract_from_detection_results(
+            pdf_path=pdf_path,
+            detection_result=document_result,
+            model_type=model_type,
+        )
+        print(
+            f"  Extracted {len(extraction_result.figures)} figures, "
+            f"{len(extraction_result.tables)} tables"
+        )
 
     return document_result
 
@@ -153,6 +169,11 @@ Examples:
         default=None,
         help="Confidence threshold (overrides config)",
     )
+    parser.add_argument(
+        "--extract",
+        action="store_true",
+        help="Extract figures and tables with captions",
+    )
 
     args = parser.parse_args()
 
@@ -173,6 +194,10 @@ Examples:
     images_dir = paths.get("images_dir", "data/images")
     json_dir = paths.get("json_dir", "data/results/json")
     viz_dir = paths.get("visualizations_dir", "data/results/visualizations")
+    extractions_dir = paths.get("extractions_dir", "data/results/extractions")
+
+    # Get extraction settings
+    extraction_config = config.get("extraction", {})
 
     print("=" * 60)
     print("YOLOv8 PDF Document Layout Detection")
@@ -181,6 +206,7 @@ Examples:
     print(f"Device: {device}")
     print(f"Confidence threshold: {confidence}")
     print(f"Visualization: {'enabled' if visualize else 'disabled'}")
+    print(f"Extraction: {'enabled' if args.extract else 'disabled'}")
     print("=" * 60)
 
     # Initialize components
@@ -225,6 +251,16 @@ Examples:
         legend_path = visualizer.save_legend()
         print(f"  Legend saved to: {legend_path}")
 
+    extractor = None
+    if args.extract:
+        extractor = FigureTableExtractor(
+            output_dir=extractions_dir,
+            image_padding=extraction_config.get("image_padding", 5),
+            max_caption_distance=extraction_config.get("max_caption_distance", 100.0),
+            dpi=dpi,
+        )
+        print(f"  Figure/Table Extractor initialized")
+
     print()
 
     # Process PDFs
@@ -244,6 +280,7 @@ Examples:
             detector=detector,
             processor=processor,
             visualizer=visualizer,
+            extractor=extractor,
             images_dir=images_dir,
             model_type=model_type,
         )
@@ -273,6 +310,7 @@ Examples:
                     detector=detector,
                     processor=processor,
                     visualizer=visualizer,
+                    extractor=extractor,
                     images_dir=images_dir,
                     model_type=model_type,
                 )

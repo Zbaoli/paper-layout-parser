@@ -54,6 +54,21 @@ paths:
   # Models directory
   models_dir: "models"
 
+  # Extractions directory
+  extractions_dir: "data/results/extractions"
+
+# Extraction settings
+extraction:
+  # Padding in pixels to add around cropped images
+  image_padding: 5
+
+  # Maximum vertical distance in pixels for caption matching
+  # (100px at 200 DPI is approximately 0.5 inch)
+  max_caption_distance: 100.0
+
+  # Minimum horizontal overlap ratio for caption matching (0-1)
+  min_horizontal_overlap: 0.3
+
 # Visualization settings
 visualization:
   # Enable visualization output
