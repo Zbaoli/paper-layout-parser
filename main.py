@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-YOLOv8 PDF Document Layout Detection
+PDF Document Layout Detection
 
 Main program for detecting document layout elements in PDF files.
-Supports DocLayout-YOLO and YOLOv8 models with MPS acceleration.
+Uses DocLayout-YOLO with MPS/CUDA/CPU acceleration.
 """
 
 import argparse
@@ -39,8 +39,10 @@ def process_pdf(
     processor: ResultProcessor,
     visualizer: Optional[Visualizer],
     extractor: Optional[FigureTableExtractor],
-    images_dir: str,
-    model_type: str,
+    output_dir: str,
+    pages_subdir: str = "pages",
+    annotated_subdir: str = "annotated",
+    extractions_subdir: str = "extractions",
 ) -> dict:
     """
     Process a single PDF file.
@@ -52,8 +54,10 @@ def process_pdf(
         processor: ResultProcessor instance
         visualizer: Optional Visualizer instance
         extractor: Optional FigureTableExtractor instance
-        images_dir: Directory to save converted images
-        model_type: Type of model used
+        output_dir: Root output directory
+        pages_subdir: Subdirectory name for page images
+        annotated_subdir: Subdirectory name for annotated images
+        extractions_subdir: Subdirectory name for extractions
 
     Returns:
         Document result dictionary
@@ -61,11 +65,19 @@ def process_pdf(
     pdf_path = Path(pdf_path)
     pdf_name = pdf_path.stem
 
+    # Create output directory for this PDF
+    pdf_output_dir = Path(output_dir) / pdf_name
+    pages_dir = pdf_output_dir / pages_subdir
+    annotated_dir = pdf_output_dir / annotated_subdir
+    extractions_dir = pdf_output_dir / extractions_subdir
+
+    pages_dir.mkdir(parents=True, exist_ok=True)
+
     start_time = time.time()
 
     # Step 1: Convert PDF to images
     print(f"  Converting PDF to images...")
-    conversion_results = converter.convert_pdf(pdf_path, images_dir)
+    conversion_results = converter.convert_pdf(pdf_path, str(pages_dir))
 
     # Step 2: Detect layout elements in each page
     print(f"  Detecting layout elements in {len(conversion_results)} pages...")
@@ -89,18 +101,19 @@ def process_pdf(
     document_result = processor.create_document_result(
         pdf_name=pdf_path.name,
         pages=page_results,
-        model_type=model_type,
         processing_time=processing_time,
     )
 
     # Step 4: Save JSON result
-    json_path = processor.save_result(document_result)
+    json_path = pdf_output_dir / "result.json"
+    processor.save_result(document_result, str(json_path))
     print(f"  Saved results to: {json_path}")
 
     # Step 5: Generate visualizations (if enabled)
     if visualizer:
         print(f"  Generating visualizations...")
-        viz_paths = visualizer.visualize_document(pdf_name, page_results)
+        annotated_dir.mkdir(parents=True, exist_ok=True)
+        viz_paths = visualizer.visualize_document(page_results, str(annotated_dir))
         print(f"  Saved {len(viz_paths)} visualization images")
 
     # Step 6: Extract figures and tables (if enabled)
@@ -109,7 +122,7 @@ def process_pdf(
         extraction_result = extractor.extract_from_detection_results(
             pdf_path=pdf_path,
             detection_result=document_result,
-            model_type=model_type,
+            output_dir=str(extractions_dir),
         )
         print(
             f"  Extracted {len(extraction_result.figures)} figures, "
@@ -122,14 +135,14 @@ def process_pdf(
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
-        description="YOLOv8 PDF Document Layout Detection",
+        description="PDF Document Layout Detection",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   python main.py                                    # Process all PDFs
   python main.py --single-pdf data/papers/test.pdf # Process single PDF
-  python main.py --model yolov8                    # Use YOLOv8 model
   python main.py --no-visualize                    # Skip visualization
+  python main.py --device cuda                     # Use NVIDIA GPU
         """,
     )
     parser.add_argument(
@@ -143,13 +156,6 @@ Examples:
         type=str,
         default=None,
         help="Process a single PDF file instead of all",
-    )
-    parser.add_argument(
-        "--model",
-        type=str,
-        choices=["doclayout", "yolov8"],
-        default=None,
-        help="Model type to use (overrides config)",
     )
     parser.add_argument(
         "--device",
@@ -181,7 +187,6 @@ Examples:
     config = load_config(args.config)
 
     # Get settings from config with CLI overrides
-    model_type = args.model or config.get("model", {}).get("type", "doclayout")
     device = args.device or config.get("device", {}).get("type", "mps")
     confidence = args.confidence or config.get("model", {}).get("confidence_threshold", 0.25)
     iou_threshold = config.get("model", {}).get("iou_threshold", 0.45)
@@ -191,18 +196,17 @@ Examples:
     # Get paths from config
     paths = config.get("paths", {})
     input_dir = paths.get("input_dir", "data/papers")
-    images_dir = paths.get("images_dir", "data/images")
-    json_dir = paths.get("json_dir", "data/results/json")
-    viz_dir = paths.get("visualizations_dir", "data/results/visualizations")
-    extractions_dir = paths.get("extractions_dir", "data/results/extractions")
+    output_dir = paths.get("output_dir", "data/output")
+    pages_subdir = paths.get("pages_subdir", "pages")
+    annotated_subdir = paths.get("annotated_subdir", "annotated")
+    extractions_subdir = paths.get("extractions_subdir", "extractions")
 
     # Get extraction settings
     extraction_config = config.get("extraction", {})
 
     print("=" * 60)
-    print("YOLOv8 PDF Document Layout Detection")
+    print("PDF Document Layout Detection (DocLayout-YOLO)")
     print("=" * 60)
-    print(f"Model: {model_type}")
     print(f"Device: {device}")
     print(f"Confidence threshold: {confidence}")
     print(f"Visualization: {'enabled' if visualize else 'disabled'}")
@@ -215,18 +219,12 @@ Examples:
     converter = PDFConverter(dpi=dpi)
     print(f"  PDF Converter initialized (DPI: {dpi})")
 
-    # Get model path based on type
-    if model_type == "doclayout":
-        model_path = config.get("model", {}).get(
-            "doclayout_model", "juliozhao/DocLayout-YOLO-DocStructBench"
-        )
-    else:
-        model_path = config.get("model", {}).get(
-            "yolov8_model", "models/yolov8-doclaynet.pt"
-        )
+    # Get model path
+    model_path = config.get("model", {}).get(
+        "doclayout_model", "juliozhao/DocLayout-YOLO-DocStructBench"
+    )
 
     detector = create_detector(
-        model_type=model_type,
         model_path=model_path,
         device=device,
         confidence_threshold=confidence,
@@ -234,27 +232,27 @@ Examples:
     )
     print(f"  Layout Detector initialized")
 
-    processor = ResultProcessor(output_dir=json_dir)
+    processor = ResultProcessor()
     print(f"  Result Processor initialized")
 
     visualizer = None
     if visualize:
         viz_config = config.get("visualization", {})
         visualizer = Visualizer(
-            output_dir=viz_dir,
             line_thickness=viz_config.get("line_thickness", 2),
             font_scale=viz_config.get("font_scale", 0.6),
             show_confidence=viz_config.get("show_confidence", True),
         )
         print(f"  Visualizer initialized")
-        # Save legend
-        legend_path = visualizer.save_legend()
+        # Save legend to output directory
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+        legend_path = visualizer.save_legend(str(output_path / "legend.png"))
         print(f"  Legend saved to: {legend_path}")
 
     extractor = None
     if args.extract:
         extractor = FigureTableExtractor(
-            output_dir=extractions_dir,
             image_padding=extraction_config.get("image_padding", 5),
             max_caption_distance=extraction_config.get("max_caption_distance", 100.0),
             dpi=dpi,
@@ -281,8 +279,10 @@ Examples:
             processor=processor,
             visualizer=visualizer,
             extractor=extractor,
-            images_dir=images_dir,
-            model_type=model_type,
+            output_dir=output_dir,
+            pages_subdir=pages_subdir,
+            annotated_subdir=annotated_subdir,
+            extractions_subdir=extractions_subdir,
         )
         all_results.append(result)
         print(f"  Total detections: {result['statistics']['total_detections']}")
@@ -311,8 +311,10 @@ Examples:
                     processor=processor,
                     visualizer=visualizer,
                     extractor=extractor,
-                    images_dir=images_dir,
-                    model_type=model_type,
+                    output_dir=output_dir,
+                    pages_subdir=pages_subdir,
+                    annotated_subdir=annotated_subdir,
+                    extractions_subdir=extractions_subdir,
                 )
                 all_results.append(result)
                 tqdm.write(f"  Total detections: {result['statistics']['total_detections']}")
@@ -324,7 +326,8 @@ Examples:
         print("\n" + "=" * 60)
         print("Generating summary report...")
         summary = processor.generate_summary_report(all_results)
-        summary_path = processor.save_summary_report(summary)
+        summary_path = Path(output_dir) / "summary_report.json"
+        processor.save_summary_report(summary, str(summary_path))
         print(f"Summary report saved to: {summary_path}")
 
         # Print summary statistics

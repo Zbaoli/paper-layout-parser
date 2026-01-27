@@ -71,12 +71,11 @@ class ExtractionResult:
 class CaptionMatcher:
     """Matches figures/tables with their captions based on spatial proximity."""
 
-    # Class name mappings for different models
-    FIGURE_CLASSES = {"Figure", "Picture"}
+    # Class name mappings for DocLayout-YOLO
+    FIGURE_CLASSES = {"Figure"}
     TABLE_CLASSES = {"Table"}
     FIGURE_CAPTION_CLASSES = {"Figure-Caption", "Figure-caption"}
     TABLE_CAPTION_CLASSES = {"Table-Caption", "Table-caption"}
-    GENERIC_CAPTION_CLASSES = {"Caption"}  # DocLayNet uses generic Caption
 
     def __init__(
         self,
@@ -217,7 +216,6 @@ class FigureTableExtractor:
 
     def __init__(
         self,
-        output_dir: str = "data/results/extractions",
         image_padding: int = 5,
         max_caption_distance: float = 100.0,
         dpi: int = 200,
@@ -226,12 +224,10 @@ class FigureTableExtractor:
         Initialize the extractor.
 
         Args:
-            output_dir: Directory to save extraction results
             image_padding: Padding in pixels to add around cropped images
             max_caption_distance: Maximum vertical distance for caption matching
             dpi: DPI used for image conversion (for coordinate conversion)
         """
-        self.output_dir = Path(output_dir)
         self.image_padding = image_padding
         self.dpi = dpi
         self.caption_matcher = CaptionMatcher(
@@ -267,17 +263,12 @@ class FigureTableExtractor:
             if d.get("class_name") in target_classes
         ]
 
-    def _get_caption_classes(self, item_type: str, model_type: str) -> set:
-        """Get the appropriate caption class names based on item type and model."""
-        if model_type == "yolov8":
-            # DocLayNet uses generic "Caption" for all captions
-            return CaptionMatcher.GENERIC_CAPTION_CLASSES
+    def _get_caption_classes(self, item_type: str) -> set:
+        """Get the appropriate caption class names based on item type."""
+        if item_type == "figure":
+            return CaptionMatcher.FIGURE_CAPTION_CLASSES
         else:
-            # DocLayout-YOLO has specific caption classes
-            if item_type == "figure":
-                return CaptionMatcher.FIGURE_CAPTION_CLASSES
-            else:
-                return CaptionMatcher.TABLE_CAPTION_CLASSES
+            return CaptionMatcher.TABLE_CAPTION_CLASSES
 
     def _extract_text_from_rect(
         self,
@@ -338,7 +329,7 @@ class FigureTableExtractor:
         self,
         pdf_path: str,
         detection_result: Dict[str, Any],
-        model_type: str = "doclayout",
+        output_dir: str,
     ) -> ExtractionResult:
         """
         Extract figures and tables from a PDF based on detection results.
@@ -346,7 +337,7 @@ class FigureTableExtractor:
         Args:
             pdf_path: Path to the PDF file
             detection_result: Detection result dictionary from ResultProcessor
-            model_type: Type of model used ("doclayout" or "yolov8")
+            output_dir: Directory to save extraction results
 
         Returns:
             ExtractionResult containing all extracted items
@@ -355,7 +346,7 @@ class FigureTableExtractor:
         pdf_name = pdf_path.stem
 
         # Create output directory structure
-        extraction_dir = self.output_dir / pdf_name
+        extraction_dir = Path(output_dir)
         figures_dir = extraction_dir / "figures"
         tables_dir = extraction_dir / "tables"
         figures_dir.mkdir(parents=True, exist_ok=True)
@@ -389,7 +380,7 @@ class FigureTableExtractor:
                 detections, CaptionMatcher.FIGURE_CLASSES
             )
             figure_captions = self._filter_detections(
-                detections, self._get_caption_classes("figure", model_type)
+                detections, self._get_caption_classes("figure")
             )
 
             # Match figures to captions
@@ -430,7 +421,7 @@ class FigureTableExtractor:
                 detections, CaptionMatcher.TABLE_CLASSES
             )
             table_captions = self._filter_detections(
-                detections, self._get_caption_classes("table", model_type)
+                detections, self._get_caption_classes("table")
             )
 
             # Match tables to captions

@@ -16,15 +16,9 @@ from .layout_detector import Detection
 class ResultProcessor:
     """Processes and saves layout detection results."""
 
-    def __init__(self, output_dir: str = "data/results/json"):
-        """
-        Initialize the result processor.
-
-        Args:
-            output_dir: Directory to save JSON results
-        """
-        self.output_dir = Path(output_dir)
-        self.output_dir.mkdir(parents=True, exist_ok=True)
+    def __init__(self):
+        """Initialize the result processor."""
+        pass
 
     def create_page_result(
         self,
@@ -109,7 +103,6 @@ class ResultProcessor:
         self,
         pdf_name: str,
         pages: List[Dict[str, Any]],
-        model_type: str = "doclayout",
         processing_time: float = None,
     ) -> Dict[str, Any]:
         """
@@ -118,7 +111,6 @@ class ResultProcessor:
         Args:
             pdf_name: Name of the PDF file
             pages: List of page result dictionaries
-            model_type: Type of model used for detection
             processing_time: Optional processing time in seconds
 
         Returns:
@@ -129,7 +121,7 @@ class ResultProcessor:
         result = {
             "pdf_name": pdf_name,
             "total_pages": len(pages),
-            "model_type": model_type,
+            "model": "doclayout-yolo",
             "processed_at": datetime.now().isoformat(),
             "processing_time_seconds": round(processing_time, 2) if processing_time else None,
             "pages": pages,
@@ -141,45 +133,37 @@ class ResultProcessor:
     def save_result(
         self,
         result: Dict[str, Any],
-        filename: Optional[str] = None,
+        output_path: str,
     ) -> str:
         """
         Save a result dictionary to a JSON file.
 
         Args:
             result: Result dictionary to save
-            filename: Optional filename (defaults to pdf_name)
+            output_path: Path to save the JSON file
 
         Returns:
             Path to the saved JSON file
         """
-        if filename is None:
-            # Use PDF name without extension
-            pdf_name = result.get("pdf_name", "result")
-            if pdf_name.endswith(".pdf"):
-                pdf_name = pdf_name[:-4]
-            filename = f"{pdf_name}.json"
-
-        output_path = self.output_dir / filename
+        output_path = Path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
 
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(result, f, indent=2, ensure_ascii=False)
 
         return str(output_path)
 
-    def load_result(self, filename: str) -> Dict[str, Any]:
+    def load_result(self, file_path: str) -> Dict[str, Any]:
         """
         Load a result from a JSON file.
 
         Args:
-            filename: Name of the JSON file to load
+            file_path: Path to the JSON file to load
 
         Returns:
             Loaded result dictionary
         """
-        input_path = self.output_dir / filename
-
-        with open(input_path, "r", encoding="utf-8") as f:
+        with open(file_path, "r", encoding="utf-8") as f:
             return json.load(f)
 
     def generate_summary_report(
@@ -229,19 +213,20 @@ class ResultProcessor:
     def save_summary_report(
         self,
         report: Dict[str, Any],
-        filename: str = "summary_report.json",
+        output_path: str,
     ) -> str:
         """
         Save a summary report to a JSON file.
 
         Args:
             report: Summary report dictionary
-            filename: Output filename
+            output_path: Path to save the file
 
         Returns:
             Path to the saved file
         """
-        output_path = self.output_dir / filename
+        output_path = Path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
 
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(report, f, indent=2, ensure_ascii=False)

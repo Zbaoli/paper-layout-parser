@@ -103,6 +103,7 @@ class PDFConverter:
         pdf_path: str,
         output_dir: str,
         pages: Optional[List[int]] = None,
+        create_subdir: bool = False,
     ) -> List[Tuple[str, Tuple[int, int]]]:
         """
         Convert all pages (or specified pages) of a PDF to images.
@@ -111,6 +112,7 @@ class PDFConverter:
             pdf_path: Path to the PDF file
             output_dir: Directory to save output images
             pages: List of page numbers to convert (0-indexed), None for all pages
+            create_subdir: Whether to create a subdirectory named after the PDF
 
         Returns:
             List of tuples containing (output path, (width, height)) for each page
@@ -118,10 +120,12 @@ class PDFConverter:
         pdf_path = Path(pdf_path)
         output_dir = Path(output_dir)
 
-        # Create subdirectory named after the PDF
-        pdf_name = pdf_path.stem
-        pdf_output_dir = output_dir / pdf_name
-        pdf_output_dir.mkdir(parents=True, exist_ok=True)
+        # Optionally create subdirectory named after the PDF
+        if create_subdir:
+            pdf_name = pdf_path.stem
+            output_dir = output_dir / pdf_name
+
+        output_dir.mkdir(parents=True, exist_ok=True)
 
         doc = fitz.open(pdf_path)
         total_pages = len(doc)
@@ -134,7 +138,7 @@ class PDFConverter:
         for page_num in pages:
             if 0 <= page_num < total_pages:
                 output_path, size = self.convert_page(
-                    pdf_path, page_num, pdf_output_dir
+                    pdf_path, page_num, output_dir
                 )
                 results.append((output_path, size))
 
@@ -168,7 +172,7 @@ class PDFConverter:
                 progress_callback(i, len(pdf_files), pdf_path.name)
 
             try:
-                conversion_result = self.convert_pdf(pdf_path, output_dir)
+                conversion_result = self.convert_pdf(pdf_path, output_dir, create_subdir=True)
                 results[pdf_path.stem] = {
                     "status": "success",
                     "pages": conversion_result,

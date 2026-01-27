@@ -45,7 +45,6 @@ class Visualizer:
 
     def __init__(
         self,
-        output_dir: str = "data/results/visualizations",
         line_thickness: int = 2,
         font_scale: float = 0.6,
         show_confidence: bool = True,
@@ -55,14 +54,11 @@ class Visualizer:
         Initialize the visualizer.
 
         Args:
-            output_dir: Directory to save visualization images
             line_thickness: Thickness of bounding box lines
             font_scale: Scale factor for text labels
             show_confidence: Whether to show confidence scores
             colors: Optional custom colors for each class (BGR format)
         """
-        self.output_dir = Path(output_dir)
-        self.output_dir.mkdir(parents=True, exist_ok=True)
         self.line_thickness = line_thickness
         self.font_scale = font_scale
         self.show_confidence = show_confidence
@@ -164,7 +160,7 @@ class Visualizer:
         self,
         image_path: str,
         detections: List[Detection],
-        output_path: Optional[str] = None,
+        output_path: str,
     ) -> str:
         """
         Visualize detections on an image and save the result.
@@ -172,7 +168,7 @@ class Visualizer:
         Args:
             image_path: Path to the input image
             detections: List of detections to draw
-            output_path: Optional output path (auto-generated if None)
+            output_path: Path to save the visualization
 
         Returns:
             Path to the saved visualization
@@ -185,10 +181,8 @@ class Visualizer:
         # Draw detections
         result = self.draw_detections(image, detections)
 
-        # Generate output path if not provided
-        if output_path is None:
-            image_name = Path(image_path).name
-            output_path = str(self.output_dir / image_name)
+        # Ensure output directory exists
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
         # Save result
         cv2.imwrite(output_path, result)
@@ -197,22 +191,21 @@ class Visualizer:
 
     def visualize_document(
         self,
-        pdf_name: str,
         page_results: List[Dict],
+        output_dir: str,
     ) -> List[str]:
         """
         Visualize all pages of a document.
 
         Args:
-            pdf_name: Name of the PDF document
             page_results: List of page result dictionaries
+            output_dir: Directory to save visualization images
 
         Returns:
             List of paths to saved visualizations
         """
-        # Create subdirectory for this document
-        doc_output_dir = self.output_dir / pdf_name
-        doc_output_dir.mkdir(parents=True, exist_ok=True)
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
 
         output_paths = []
 
@@ -235,7 +228,7 @@ class Visualizer:
             # Generate output path
             page_num = page_result.get("page_number", 0)
             output_filename = f"page_{page_num:04d}.png"
-            output_path = str(doc_output_dir / output_filename)
+            output_path = str(output_dir / output_filename)
 
             # Visualize and save
             try:
@@ -296,17 +289,18 @@ class Visualizer:
 
         return legend
 
-    def save_legend(self, filename: str = "legend.png") -> str:
+    def save_legend(self, output_path: str) -> str:
         """
         Save the legend image.
 
         Args:
-            filename: Output filename
+            output_path: Path to save the legend image
 
         Returns:
             Path to the saved legend
         """
         legend = self.create_legend()
-        output_path = self.output_dir / filename
+        output_path = Path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
         cv2.imwrite(str(output_path), legend)
         return str(output_path)
