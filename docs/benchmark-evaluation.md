@@ -2,7 +2,7 @@
 
 ## 概述
 
-对 DocLayout-YOLO 和 YOLOv8-DocLayNet 两个模型在 DocLayNet 数据集上进行基准评测，比较其在文档布局检测任务上的表现。
+对 DocLayout-YOLO 模型在 DocLayNet 数据集上进行基准评测，评估其在文档布局检测任务上的表现。
 
 ---
 
@@ -19,7 +19,7 @@ src/benchmark.py    # 基准评测模块
 - 支持 DocLayNet 完整数据集 (28GB) 和 DocLayNet-small (~50MB)
 - 自动检测数据集格式 (COCO / per-image JSON)
 - 计算 Precision / Recall / F1 指标
-- 生成 Markdown 对比报告
+- 生成评测报告
 
 ---
 
@@ -40,6 +40,9 @@ src/benchmark.py    # 基准评测模块
 # 下载小数据集 (推荐)
 uv run python -m src.benchmark download --dataset doclaynet-small
 
+# 使用镜像加速 (中国地区)
+uv run python -m src.benchmark download --dataset doclaynet-small --mirror hf-mirror
+
 # 下载完整数据集 (28GB)
 uv run python -m src.benchmark download --dataset doclaynet --split test
 ```
@@ -54,42 +57,32 @@ uv run python -m src.benchmark download --dataset doclaynet --split test
 - IoU 阈值: 0.5
 - 评测类别: Picture (Figure), Table
 
-### 结果对比
+### DocLayout-YOLO 结果
 
-| 指标 | DocLayout-YOLO | YOLOv8-DocLayNet |
-|------|----------------|------------------|
-| **Figure F1** | 0.16 | **0.52** |
-| **Table F1** | 0.66 | **0.91** |
-| **End-to-End F1** | 0.46 | **0.72** |
-
-### 详细指标
-
-#### Figure Detection (Picture)
+#### Figure Detection
 
 | Model | Precision | Recall | F1 |
 |-------|-----------|--------|-----|
 | DocLayoutDetector | 0.15 | 0.17 | 0.16 |
-| YOLOv8LayoutDetector | 0.35 | 1.00 | 0.52 |
 
 #### Table Detection
 
 | Model | Precision | Recall | F1 |
 |-------|-----------|--------|-----|
 | DocLayoutDetector | 0.74 | 0.59 | 0.66 |
-| YOLOv8LayoutDetector | 0.89 | 0.94 | 0.91 |
 
 ---
 
 ## 结果分析
 
-### 为什么 DocLayout-YOLO 表现较差？
+### 为什么 Figure 检测表现较差？
 
-**不是代码 Bug，是模型训练数据不同。**
+**不是代码 Bug，是模型训练数据标注风格不同。**
 
 | 模型 | 训练数据集 | 图片类名 |
 |------|-----------|---------|
 | DocLayout-YOLO | DocStructBench | `Figure` |
-| YOLOv8-DocLayNet | DocLayNet | `Picture` |
+| DocLayNet GT | DocLayNet | `Picture` |
 
 ### 标注风格差异
 
@@ -98,20 +91,15 @@ uv run python -m src.benchmark download --dataset doclaynet --split test
 ```
 GT (DocLayNet):     14 个 Picture (每个小图单独标注)
 DocLayout-YOLO:      1 个 Figure  (把多个小图合并成一个大区域)
-YOLOv8-DocLayNet:   24 个 Picture (每个小图单独识别)
 ```
 
 ### 关键发现
 
-1. **DocLayout-YOLO (DocStructBench 训练)**
-   - 倾向于检测"图片区域"作为整体
-   - 对小图片/logo 不敏感
-   - 适合粗粒度布局分析
-
-2. **YOLOv8-DocLayNet (DocLayNet 训练)**
-   - 标注风格与 DocLayNet 一致
-   - 能识别每个独立的小图片
-   - 适合细粒度布局分析
+**DocLayout-YOLO (DocStructBench 训练)**
+- 倾向于检测"图片区域"作为整体
+- 对小图片/logo 不敏感
+- 适合粗粒度布局分析
+- 在学术论文场景表现优秀
 
 ---
 
@@ -126,20 +114,7 @@ uv run python -m src.benchmark download --dataset doclaynet-small
 # 评测 DocLayout-YOLO
 uv run python -m src.benchmark evaluate \
   --dataset data/benchmark/doclaynet-small \
-  --model doclayout \
   --output data/benchmark/results/doclayout_report.json
-
-# 评测 YOLOv8
-uv run python -m src.benchmark evaluate \
-  --dataset data/benchmark/doclaynet-small \
-  --model yolov8 \
-  --output data/benchmark/results/yolov8_report.json
-
-# 生成对比报告
-uv run python -m src.benchmark compare \
-  --inputs data/benchmark/results/doclayout_report.json \
-          data/benchmark/results/yolov8_report.json \
-  --output data/benchmark/results/comparison.md
 ```
 
 ### 输出文件
@@ -152,21 +127,8 @@ data/benchmark/
 │           ├── images/       # 测试图片
 │           └── annotations/  # 标注文件
 └── results/
-    ├── doclayout_report.json # DocLayout 评测结果
-    ├── yolov8_report.json    # YOLOv8 评测结果
-    └── comparison.md         # 对比报告
+    └── doclayout_report.json # 评测结果
 ```
-
----
-
-## 模型选择建议
-
-| 使用场景 | 推荐模型 |
-|----------|---------|
-| DocLayNet 风格标注 (细粒度) | YOLOv8-DocLayNet |
-| DocStructBench 风格标注 (粗粒度) | DocLayout-YOLO |
-| 学术论文布局分析 | DocLayout-YOLO |
-| 通用文档处理 | YOLOv8-DocLayNet |
 
 ---
 
@@ -213,6 +175,6 @@ def compute_iou(box1, box2):
 
 ## 总结
 
-1. YOLOv8-DocLayNet 在 DocLayNet 数据集上表现显著优于 DocLayout-YOLO
-2. 这是由于训练数据集不同导致的标注风格差异，而非代码问题
-3. 选择模型时应考虑目标应用场景的标注风格需求
+1. DocLayout-YOLO 在 Table 检测上表现良好 (F1: 0.66)
+2. Figure 检测在 DocLayNet 评测集上得分较低，但这是由于标注风格差异
+3. DocLayout-YOLO 更适合学术论文等粗粒度布局分析场景

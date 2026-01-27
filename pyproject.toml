@@ -1,7 +1,7 @@
 [project]
-name = "yolo-layout-detection"
-version = "1.0.0"
-description = "YOLOv8 PDF Document Layout Detection using DocLayout-YOLO and YOLOv8 models"
+name = "pdf-layout-detection"
+version = "1.1.0"
+description = "PDF Document Layout Detection using DocLayout-YOLO"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }

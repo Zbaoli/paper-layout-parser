@@ -1,12 +1,12 @@
-# YOLOv8 PDF 文档布局检测 - 开发日志
+# PDF 文档布局检测 - 开发日志
 
 ## 项目概述
 
-使用 YOLOv8 对 PDF 文件进行文档布局检测，识别标题、段落、表格、图片、公式等布局元素。
+使用 DocLayout-YOLO 对 PDF 文件进行文档布局检测，识别标题、段落、表格、图片、公式等布局元素。
 
 ### 环境
-- **设备**: Mac M系列芯片 (使用 MPS 加速)
-- **模型**: DocLayout-YOLO 和 YOLOv8-DocLayNet 双模型支持
+- **设备**: Mac M系列芯片 (使用 MPS 加速) / NVIDIA GPU (CUDA)
+- **模型**: DocLayout-YOLO
 - **包管理**: uv
 
 ---
@@ -14,13 +14,13 @@
 ## 项目结构
 
 ```
-yolo_project/
+paper-layout-parser/
 ├── pyproject.toml           # 项目配置和依赖
 ├── uv.lock                  # 依赖锁定文件
 ├── config/
 │   └── config.yaml          # 运行配置
 ├── data/
-│   ├── papers/              # 输入 PDF (27 个文件)
+│   ├── papers/              # 输入 PDF
 │   ├── images/              # PDF 转换后的图像
 │   └── results/
 │       ├── json/            # 检测结果 JSON
@@ -51,17 +51,11 @@ yolo_project/
 
 ### 2. 布局检测模块 (`src/layout_detector.py`)
 
-核心检测模块，支持两种模型：
-
-| 模型 | 说明 |
-|------|------|
-| DocLayout-YOLO | 使用 `doclayout-yolo` 包，从 HuggingFace 自动下载 |
-| YOLOv8 | 使用 `ultralytics` 包，需手动放置模型文件 |
+核心检测模块，使用 DocLayout-YOLO 模型。
 
 **类结构**:
 - `BaseLayoutDetector`: 抽象基类
 - `DocLayoutDetector`: DocLayout-YOLO 实现
-- `YOLOv8LayoutDetector`: YOLOv8 实现
 - `create_detector()`: 工厂函数
 
 ### 3. 结果处理模块 (`src/result_processor.py`)
@@ -76,7 +70,7 @@ yolo_project/
 {
   "pdf_name": "example.pdf",
   "total_pages": 10,
-  "model_type": "doclayout",
+  "model": "doclayout-yolo",
   "pages": [{
     "page_number": 1,
     "detections": [{
@@ -117,22 +111,6 @@ yolo_project/
 | 7 | Table-Footnote | 表格脚注 |
 | 8 | Isolate-Formula | 独立公式 |
 | 9 | Formula-Caption | 公式说明 |
-
-### DocLayNet (11 类)
-
-| ID | 类别 |
-|----|------|
-| 0 | Caption |
-| 1 | Footnote |
-| 2 | Formula |
-| 3 | List-item |
-| 4 | Page-footer |
-| 5 | Page-header |
-| 6 | Picture |
-| 7 | Section-header |
-| 8 | Table |
-| 9 | Text |
-| 10 | Title |
 
 ---
 
@@ -219,17 +197,14 @@ uv sync
 uv run python main.py
 
 # 处理单个 PDF
-uv run python main.py --single-pdf data/papers/YOLOv11.pdf
-
-# 切换模型
-uv run python main.py --model doclayout  # DocLayout-YOLO (默认)
-uv run python main.py --model yolov8     # YOLOv8
+uv run python main.py --single-pdf data/papers/example.pdf
 
 # 跳过可视化
 uv run python main.py --no-visualize
 
 # 指定设备
 uv run python main.py --device mps   # Mac M系列
+uv run python main.py --device cuda  # NVIDIA GPU
 uv run python main.py --device cpu   # CPU
 ```
 
