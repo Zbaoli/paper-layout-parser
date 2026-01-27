@@ -1,12 +1,12 @@
 """
-YOLOv8 PDF Document Layout Detection
+PDF Document Layout Detection
 
 This package provides tools for detecting document layout elements
-in PDF files using YOLOv8-based models.
+in PDF files using DocLayout-YOLO.
 """
 
 from .pdf_converter import PDFConverter
-from .layout_detector import create_detector, DocLayoutDetector, YOLOv8LayoutDetector
+from .layout_detector import create_detector, DocLayoutDetector
 from .result_processor import ResultProcessor
 from .visualizer import Visualizer
 from .figure_table_extractor import FigureTableExtractor, ExtractedItem, ExtractionResult
@@ -16,7 +16,6 @@ __all__ = [
     "PDFConverter",
     "create_detector",
     "DocLayoutDetector",
-    "YOLOv8LayoutDetector",
     "ResultProcessor",
     "Visualizer",
     "FigureTableExtractor",

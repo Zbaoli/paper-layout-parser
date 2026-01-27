@@ -860,22 +860,18 @@ def download_doclaynet(output_dir: str, split: str = "test") -> bool:
 
 def run_evaluation(
     dataset_path: str,
-    model_type: str = "doclayout",
     split: str = "test",
     max_samples: Optional[int] = None,
     output_path: Optional[str] = None,
-    model_variant: str = "n",
 ) -> BenchmarkResult:
     """
     Run benchmark evaluation.
 
     Args:
         dataset_path: Path to DocLayNet dataset
-        model_type: Model type to evaluate
         split: Dataset split
         max_samples: Maximum samples to evaluate
         output_path: Path to save results
-        model_variant: YOLOv8 model variant (n, s, m)
 
     Returns:
         BenchmarkResult
@@ -892,8 +888,8 @@ def run_evaluation(
         sys.exit(1)
 
     # Create detector
-    print(f"Loading {model_type} model...")
-    detector = create_detector(model_type=model_type, model_variant=model_variant)
+    print("Loading DocLayout-YOLO model...")
+    detector = create_detector()
 
     # Create extractor (not used directly in current evaluation)
     extractor = FigureTableExtractor()
@@ -1083,13 +1079,6 @@ def main():
         help="Path to dataset directory",
     )
     eval_parser.add_argument(
-        "--model",
-        type=str,
-        default="doclayout",
-        choices=["doclayout", "yolov8"],
-        help="Model type to evaluate",
-    )
-    eval_parser.add_argument(
         "--split",
         type=str,
         default="test",
@@ -1113,13 +1102,6 @@ def main():
         default=None,
         choices=["hf-mirror", "openxlab"],
         help="Use HuggingFace mirror for model download",
-    )
-    eval_parser.add_argument(
-        "--model-variant",
-        type=str,
-        default="n",
-        choices=["n", "s", "m"],
-        help="YOLOv8 model variant (n=nano, s=small, m=medium)",
     )
 
     # Report command
@@ -1167,11 +1149,9 @@ def main():
         setup_hf_mirror(args.mirror)
         result = run_evaluation(
             dataset_path=args.dataset,
-            model_type=args.model,
             split=args.split,
             max_samples=args.max_samples,
             output_path=args.output,
-            model_variant=args.model_variant,
         )
 
         # Print summary
