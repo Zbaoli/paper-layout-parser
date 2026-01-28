@@ -12,6 +12,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import fitz  # PyMuPDF
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from .base import BaseVLMClient, VLMResponse
 from .image_renderer import AnnotationRenderer
@@ -517,14 +520,6 @@ def create_vlm_client(
     Returns:
         Configured VLM client
     """
-    # Try to load .env file
-    try:
-        from dotenv import load_dotenv
-
-        load_dotenv()
-    except ImportError:
-        pass
-
     if backend == "ollama":
         from .ollama_client import OllamaClient
 

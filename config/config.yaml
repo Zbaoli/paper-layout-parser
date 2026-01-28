@@ -14,7 +14,7 @@ model:
 # Device settings
 device:
   # Use MPS for Mac M-series chips, "cpu" for CPU only
-  type: "mps"
+  type: "cuda"
 
 # PDF conversion settings
 pdf:
@@ -62,20 +62,6 @@ extraction:
     figure_direction: "below"
     # Tables typically have captions above (academic papers convention)
     table_direction: "above"
-
-# Benchmark settings
-benchmark:
-  # Default dataset for evaluation
-  dataset: "doclaynet"
-
-  # Default split for evaluation
-  split: "test"
-
-  # IoU threshold for matching predictions to ground truth
-  iou_threshold: 0.5
-
-  # Dataset paths
-  doclaynet_path: "data/benchmark/doclaynet"
 
 # Visualization settings
 visualization:
