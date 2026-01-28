@@ -97,6 +97,31 @@ doclayout_classes:
   8: "Isolate-Formula"
   9: "Formula-Caption"
 
+# VLM Annotation settings
+vlm_annotation:
+  # Default VLM backend (ollama, openai, anthropic)
+  default_backend: "ollama"
+
+  # OpenAI settings
+  openai:
+    model: "gpt-4o"
+    max_tokens: 1000
+    temperature: 0.1
+
+  # Anthropic settings
+  anthropic:
+    model: "claude-sonnet-4-20250514"
+    max_tokens: 1000
+    temperature: 0.1
+
+  # Ollama settings (local, free)
+  ollama:
+    model: "llava:13b"
+    timeout: 120
+
+  # Annotation confidence threshold
+  confidence_threshold: 0.7
+
 # Class colors (BGR format for OpenCV)
 class_colors:
   Title: [128, 0, 128]        # Purple
