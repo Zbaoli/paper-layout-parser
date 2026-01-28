@@ -17,7 +17,6 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
-
 # HuggingFace mirror endpoints
 HF_MIRRORS = {
     "hf-mirror": "https://hf-mirror.com",
@@ -185,7 +184,7 @@ class DocLayNetSmallLoader:
                 break
 
         if split_dir is None:
-            print(f"Split directory not found. Tried:")
+            print("Split directory not found. Tried:")
             for path in possible_paths:
                 print(f"  - {path}")
             return False
@@ -282,7 +281,9 @@ class DocLayNetSmallLoader:
 
     def get_category_name(self, category_id: int) -> str:
         """Get category name from ID (not used in this format)."""
-        return self.CLASS_NAMES[category_id - 1] if 1 <= category_id <= len(self.CLASS_NAMES) else ""
+        if 1 <= category_id <= len(self.CLASS_NAMES):
+            return self.CLASS_NAMES[category_id - 1]
+        return ""
 
 
 class DocLayNetLoader:
@@ -338,7 +339,7 @@ class DocLayNetLoader:
                 break
 
         if annotations_file is None:
-            print(f"Annotations file not found. Tried:")
+            print("Annotations file not found. Tried:")
             for path in possible_paths:
                 print(f"  - {path}")
             print("\nPlease download the dataset first with:")
@@ -690,7 +691,6 @@ def download_doclaynet_small(output_dir: str) -> bool:
     Returns:
         True if successful
     """
-    import shutil
     import zipfile
 
     try:
@@ -712,7 +712,7 @@ def download_doclaynet_small(output_dir: str) -> bool:
             print(f"  Found {num_images} test images")
             return True
 
-    print(f"Downloading DocLayNet-small dataset from HuggingFace...")
+    print("Downloading DocLayNet-small dataset from HuggingFace...")
     print(f"  Destination: {output_path}")
 
     try:
@@ -768,7 +768,7 @@ def download_doclaynet(output_dir: str, split: str = "test") -> bool:
     # IBM Cloud Storage URL for DocLayNet
     dataset_url = "https://codait-cos-dax.s3.us.cloud-object-storage.appdomain.cloud/dax-doclaynet/1.0.0/DocLayNet_core.zip"
 
-    print(f"Downloading DocLayNet dataset...")
+    print("Downloading DocLayNet dataset...")
     print(f"  Source: {dataset_url}")
     print(f"  Destination: {output_path}")
     print("  Note: This is a ~28 GiB download and may take a while.")
@@ -781,7 +781,7 @@ def download_doclaynet(output_dir: str, split: str = "test") -> bool:
 
     if annotations_file.exists() and images_dir.exists() and any(images_dir.iterdir()):
         print(f"  Dataset already exists at {output_path}")
-        print(f"  To re-download, remove the directory first.")
+        print("  To re-download, remove the directory first.")
         return True
 
     try:
@@ -793,7 +793,7 @@ def download_doclaynet(output_dir: str, split: str = "test") -> bool:
                 capture_output=False,
             )
             if result.returncode != 0:
-                print(f"  Download failed. Try manual download:")
+                print("  Download failed. Try manual download:")
                 print(f"    curl -L -o {zip_path} {dataset_url}")
                 return False
 
@@ -876,15 +876,15 @@ def run_evaluation(
     Returns:
         BenchmarkResult
     """
-    from .layout_detector import create_detector
     from .figure_table_extractor import FigureTableExtractor
+    from .layout_detector import create_detector
 
     # Check if dataset exists
     dataset_dir = Path(dataset_path)
     if not dataset_dir.exists():
         print(f"Dataset directory not found: {dataset_dir}")
         print("\nPlease download the dataset first:")
-        print(f"  uv run python -m src.benchmark download --output-dir {dataset_path} --split {split}")
+        print(f"  uv run python -m src.benchmark download --output-dir {dataset_path}")
         sys.exit(1)
 
     # Create detector
@@ -912,6 +912,169 @@ def run_evaluation(
     print(f"\nResults saved to: {output_file}")
 
     return result
+
+
+def run_vlm_annotation(
+    input_dir: str,
+    vlm_backend: str = "ollama",
+    model: Optional[str] = None,
+    output_path: Optional[str] = None,
+    pdf_path: Optional[str] = None,
+) -> None:
+    """
+    Run VLM-assisted caption annotation.
+
+    Args:
+        input_dir: Path to PDF output directory
+        vlm_backend: VLM backend to use
+        model: Model name (optional)
+        output_path: Output path for annotations
+        pdf_path: Path to original PDF (optional)
+    """
+    from .vlm_annotator import CaptionAnnotator
+    from .vlm_annotator.annotator import create_vlm_client
+
+    input_path = Path(input_dir)
+
+    # Find detection result
+    result_file = input_path / "result.json"
+    if not result_file.exists():
+        print(f"Detection result not found: {result_file}")
+        print("Run detection first with: uv run python main.py --single-pdf <pdf>")
+        sys.exit(1)
+
+    # Find pages directory
+    pages_dir = input_path / "pages"
+    if not pages_dir.exists():
+        print(f"Pages directory not found: {pages_dir}")
+        sys.exit(1)
+
+    # Create VLM client
+    print(f"Initializing VLM client: {vlm_backend}")
+    try:
+        vlm_client = create_vlm_client(backend=vlm_backend, model=model)
+    except ImportError as e:
+        print(f"Error: {e}")
+        print("Install VLM dependencies with: uv sync --extra vlm")
+        sys.exit(1)
+
+    if not vlm_client.is_available():
+        print(f"VLM backend '{vlm_backend}' is not available.")
+        if vlm_backend == "ollama":
+            print("Make sure Ollama is running: ollama serve")
+            print("And pull a vision model: ollama pull llava:13b")
+        elif vlm_backend == "openai":
+            print("Set OPENAI_API_KEY environment variable or create .env file")
+        elif vlm_backend == "anthropic":
+            print("Set ANTHROPIC_API_KEY environment variable or create .env file")
+        sys.exit(1)
+
+    print(f"Using model: {vlm_client.client_name}")
+
+    # Create annotator
+    annotator = CaptionAnnotator(vlm_client)
+
+    # Run annotation
+    print(f"Processing: {input_path}")
+    result = annotator.annotate_from_detection(
+        detection_result_path=str(result_file),
+        pages_dir=str(pages_dir),
+        output_dir=str(input_path),
+        pdf_path=pdf_path,
+    )
+
+    # Print summary
+    print("\n" + "=" * 50)
+    print("Annotation Complete")
+    print("=" * 50)
+    print(f"PDF: {result.pdf_name}")
+    print(f"Pages processed: {len(result.pages)}")
+
+    total_matches = sum(len(p.matches) for p in result.pages)
+    print(f"Total matches found: {total_matches}")
+
+    output_file = input_path / "caption_annotations.json"
+    print(f"\nAnnotations saved to: {output_file}")
+
+
+def run_caption_evaluation(
+    ground_truth_path: str,
+    detection_path: str,
+    output_path: Optional[str] = None,
+    confidence_threshold: float = 0.7,
+) -> None:
+    """
+    Run caption matching evaluation.
+
+    Args:
+        ground_truth_path: Path to VLM annotation file
+        detection_path: Path to detection/extraction result
+        output_path: Output path for evaluation report
+        confidence_threshold: Minimum confidence for ground truth matches
+    """
+    from .caption_matching import AnnotationDataset, CaptionMatchingEvaluator
+
+    gt_path = Path(ground_truth_path)
+    det_path = Path(detection_path)
+
+    if not gt_path.exists():
+        print(f"Ground truth file not found: {gt_path}")
+        sys.exit(1)
+
+    if not det_path.exists():
+        print(f"Detection file not found: {det_path}")
+        sys.exit(1)
+
+    # Load ground truth
+    print(f"Loading ground truth: {gt_path}")
+    gt_dataset = AnnotationDataset.from_annotation_file(str(gt_path))
+
+    # Load predictions
+    print(f"Loading predictions: {det_path}")
+    with open(det_path, "r") as f:
+        predictions = json.load(f)
+
+    # Run evaluation
+    print(f"Running evaluation (confidence threshold: {confidence_threshold})...")
+    evaluator = CaptionMatchingEvaluator(confidence_threshold=confidence_threshold)
+    result = evaluator.evaluate(gt_dataset, predictions)
+
+    # Save result
+    if output_path:
+        output_file = Path(output_path)
+    else:
+        output_file = Path("data/benchmark/results/caption_matching_report.json")
+
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    evaluator.save_result(result, str(output_file))
+
+    # Print summary
+    print("\n" + "=" * 50)
+    print("Caption Matching Evaluation Results")
+    print("=" * 50)
+    print(f"PDF: {result.pdf_name}")
+    print(f"Ground Truth Annotator: {result.ground_truth_annotator}")
+    print("\nOverall Metrics:")
+    print(f"  Precision: {result.precision:.4f}")
+    print(f"  Recall: {result.recall:.4f}")
+    print(f"  F1 Score: {result.f1:.4f}")
+    print("\nDetailed Counts:")
+    print(f"  True Positives: {result.true_positives}")
+    print(f"  False Positives: {result.false_positives}")
+    print(f"  False Negatives: {result.false_negatives}")
+    print(f"  Correct No Caption: {result.correct_no_caption}")
+
+    if result.figure_metrics:
+        print("\nFigure Metrics:")
+        print(f"  Accuracy: {result.figure_metrics.get('accuracy', 0):.4f}")
+        print(f"  F1: {result.figure_metrics.get('f1', 0):.4f}")
+
+    if result.table_metrics:
+        print("\nTable Metrics:")
+        print(f"  Accuracy: {result.table_metrics.get('accuracy', 0):.4f}")
+        print(f"  F1: {result.table_metrics.get('f1', 0):.4f}")
+
+    print(f"\nReport saved to: {output_file}")
 
 
 def generate_comparison_report(input_files: List[str], output_path: str) -> None:
@@ -1133,6 +1296,71 @@ def main():
         help="Output path for comparison markdown report",
     )
 
+    # Annotate command (VLM-assisted caption annotation)
+    annotate_parser = subparsers.add_parser(
+        "annotate", help="Generate ground truth annotations using VLM"
+    )
+    annotate_parser.add_argument(
+        "--input",
+        type=str,
+        required=True,
+        help="Path to PDF output directory (containing result.json and pages/)",
+    )
+    annotate_parser.add_argument(
+        "--vlm",
+        type=str,
+        default="ollama",
+        choices=["ollama", "openai", "anthropic"],
+        help="VLM backend to use (default: ollama)",
+    )
+    annotate_parser.add_argument(
+        "--model",
+        type=str,
+        default=None,
+        help="Model name (default: backend-specific default)",
+    )
+    annotate_parser.add_argument(
+        "--output",
+        type=str,
+        default=None,
+        help="Output path for annotations (default: <input>/caption_annotations.json)",
+    )
+    annotate_parser.add_argument(
+        "--pdf",
+        type=str,
+        default=None,
+        help="Path to original PDF (for text extraction, optional)",
+    )
+
+    # Evaluate caption matching command
+    eval_caption_parser = subparsers.add_parser(
+        "evaluate-caption", help="Evaluate CaptionMatcher against VLM ground truth"
+    )
+    eval_caption_parser.add_argument(
+        "--ground-truth",
+        type=str,
+        required=True,
+        help="Path to VLM annotation file (caption_annotations.json)",
+    )
+    eval_caption_parser.add_argument(
+        "--detection",
+        type=str,
+        required=True,
+        help="Path to detection result (result.json or extraction_metadata.json)",
+    )
+    eval_caption_parser.add_argument(
+        "--output",
+        type=str,
+        default=None,
+        help="Output path for evaluation report",
+    )
+    eval_caption_parser.add_argument(
+        "--confidence",
+        type=float,
+        default=0.7,
+        help="Minimum confidence threshold for ground truth matches (default: 0.7)",
+    )
+
     args = parser.parse_args()
 
     if args.command == "download":
@@ -1161,15 +1389,15 @@ def main():
         print(f"Dataset: {result.dataset}")
         print(f"Model: {result.model}")
         print(f"Samples: {result.samples_evaluated}")
-        print(f"\nFigure Detection:")
+        print("\nFigure Detection:")
         print(f"  Precision: {result.figure_detection.precision:.4f}")
         print(f"  Recall: {result.figure_detection.recall:.4f}")
         print(f"  F1: {result.figure_detection.f1:.4f}")
-        print(f"\nTable Detection:")
+        print("\nTable Detection:")
         print(f"  Precision: {result.table_detection.precision:.4f}")
         print(f"  Recall: {result.table_detection.recall:.4f}")
         print(f"  F1: {result.table_detection.f1:.4f}")
-        print(f"\nEnd-to-End:")
+        print("\nEnd-to-End:")
         print(f"  Precision: {result.end_to_end.precision:.4f}")
         print(f"  Recall: {result.end_to_end.recall:.4f}")
         print(f"  F1: {result.end_to_end.f1:.4f}")
@@ -1187,6 +1415,23 @@ def main():
 
     elif args.command == "compare":
         generate_comparison_report(args.inputs, args.output)
+
+    elif args.command == "annotate":
+        run_vlm_annotation(
+            input_dir=args.input,
+            vlm_backend=args.vlm,
+            model=args.model,
+            output_path=args.output,
+            pdf_path=args.pdf,
+        )
+
+    elif args.command == "evaluate-caption":
+        run_caption_evaluation(
+            ground_truth_path=args.ground_truth,
+            detection_path=args.detection,
+            output_path=args.output,
+            confidence_threshold=args.confidence,
+        )
 
     else:
         parser.print_help()
