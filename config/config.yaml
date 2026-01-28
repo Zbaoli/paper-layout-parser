@@ -55,6 +55,14 @@ extraction:
   # Minimum horizontal overlap ratio for caption matching (0-1)
   min_horizontal_overlap: 0.3
 
+  # Caption search direction settings
+  # Options: "below", "above", "both"
+  caption_search:
+    # Figures typically have captions below
+    figure_direction: "below"
+    # Tables typically have captions above (academic papers convention)
+    table_direction: "above"
+
 # Benchmark settings
 benchmark:
   # Default dataset for evaluation

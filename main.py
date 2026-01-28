@@ -20,7 +20,7 @@ from src.pdf_converter import PDFConverter
 from src.layout_detector import create_detector, Detection
 from src.result_processor import ResultProcessor
 from src.visualizer import Visualizer
-from src.figure_table_extractor import FigureTableExtractor
+from src.figure_table_extractor import FigureTableExtractor, SearchDirection
 
 
 def load_config(config_path: str = "config/config.yaml") -> dict:
@@ -252,10 +252,26 @@ Examples:
 
     extractor = None
     if args.extract:
+        # Parse caption search direction settings
+        caption_search_config = extraction_config.get("caption_search", {})
+        figure_dir_str = caption_search_config.get("figure_direction", "below")
+        table_dir_str = caption_search_config.get("table_direction", "above")
+
+        # Convert string to SearchDirection enum
+        direction_map = {
+            "below": SearchDirection.BELOW,
+            "above": SearchDirection.ABOVE,
+            "both": SearchDirection.BOTH,
+        }
+        figure_search_direction = direction_map.get(figure_dir_str, SearchDirection.BELOW)
+        table_search_direction = direction_map.get(table_dir_str, SearchDirection.ABOVE)
+
         extractor = FigureTableExtractor(
             image_padding=extraction_config.get("image_padding", 5),
             max_caption_distance=extraction_config.get("max_caption_distance", 100.0),
             dpi=dpi,
+            figure_search_direction=figure_search_direction,
+            table_search_direction=table_search_direction,
         )
         print(f"  Figure/Table Extractor initialized")
 

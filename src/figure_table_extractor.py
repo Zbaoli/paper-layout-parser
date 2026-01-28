@@ -7,10 +7,19 @@ based on layout detection results.
 
 import json
 from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 
 import fitz  # PyMuPDF
+
+
+class SearchDirection(Enum):
+    """Direction to search for captions relative to the item."""
+
+    BELOW = "below"  # Caption is below the item (default for figures)
+    ABOVE = "above"  # Caption is above the item (default for tables)
+    BOTH = "both"  # Search in both directions
 
 
 @dataclass
@@ -81,6 +90,8 @@ class CaptionMatcher:
         self,
         max_vertical_distance: float = 100.0,
         min_horizontal_overlap: float = 0.3,
+        figure_search_direction: SearchDirection = SearchDirection.BELOW,
+        table_search_direction: SearchDirection = SearchDirection.ABOVE,
     ):
         """
         Initialize the caption matcher.
@@ -89,9 +100,13 @@ class CaptionMatcher:
             max_vertical_distance: Maximum vertical distance in pixels between
                                    item and caption (default 100px at 200 DPI ~ 0.5 inch)
             min_horizontal_overlap: Minimum horizontal overlap ratio (0-1)
+            figure_search_direction: Direction to search for figure captions
+            table_search_direction: Direction to search for table captions
         """
         self.max_vertical_distance = max_vertical_distance
         self.min_horizontal_overlap = min_horizontal_overlap
+        self.figure_search_direction = figure_search_direction
+        self.table_search_direction = table_search_direction
 
     def _get_horizontal_overlap(
         self,
@@ -120,27 +135,60 @@ class CaptionMatcher:
         self,
         item_bbox: Dict[str, float],
         caption_bbox: Dict[str, float],
-    ) -> float:
+        search_direction: SearchDirection,
+    ) -> Tuple[float, bool]:
         """
-        Calculate vertical distance from item bottom to caption top.
-        Positive value means caption is below the item.
+        Calculate vertical distance between item and caption.
+
+        Args:
+            item_bbox: Bounding box of the item (figure/table)
+            caption_bbox: Bounding box of the caption
+            search_direction: Direction to search for caption
+
+        Returns:
+            Tuple of (distance, is_valid_direction) where:
+            - distance: Absolute vertical distance in pixels
+            - is_valid_direction: Whether caption is in the valid direction
         """
-        return caption_bbox["y1"] - item_bbox["y2"]
+        # Distance when caption is below item (caption top - item bottom)
+        dist_below = caption_bbox["y1"] - item_bbox["y2"]
+        # Distance when caption is above item (item top - caption bottom)
+        dist_above = item_bbox["y1"] - caption_bbox["y2"]
+
+        if search_direction == SearchDirection.BELOW:
+            return abs(dist_below), dist_below >= 0
+        elif search_direction == SearchDirection.ABOVE:
+            return abs(dist_above), dist_above >= 0
+        else:  # BOTH
+            if dist_below >= 0:
+                return dist_below, True
+            elif dist_above >= 0:
+                return dist_above, True
+            # Overlapping case - use minimum distance
+            return 0.0, True
 
     def _is_valid_match(
         self,
         item_bbox: Dict[str, float],
         caption_bbox: Dict[str, float],
+        search_direction: SearchDirection,
     ) -> Tuple[bool, float]:
         """
         Check if a caption is a valid match for an item.
 
+        Args:
+            item_bbox: Bounding box of the item (figure/table)
+            caption_bbox: Bounding box of the caption
+            search_direction: Direction to search for caption
+
         Returns:
             Tuple of (is_valid, distance) where distance is used for ranking
         """
-        # Caption should be below the item
-        vertical_distance = self._get_vertical_distance(item_bbox, caption_bbox)
-        if vertical_distance < 0 or vertical_distance > self.max_vertical_distance:
+        # Check vertical distance and direction
+        vertical_distance, is_valid_direction = self._get_vertical_distance(
+            item_bbox, caption_bbox, search_direction
+        )
+        if not is_valid_direction or vertical_distance > self.max_vertical_distance:
             return False, float("inf")
 
         # Check horizontal overlap
@@ -154,6 +202,7 @@ class CaptionMatcher:
         self,
         items: List[Dict[str, Any]],
         captions: List[Dict[str, Any]],
+        item_type: str = "figure",
     ) -> List[Tuple[Dict[str, Any], Optional[Dict[str, Any]]]]:
         """
         Match items (figures/tables) to their captions.
@@ -164,6 +213,7 @@ class CaptionMatcher:
         Args:
             items: List of detection dicts with "bbox" key
             captions: List of detection dicts with "bbox" key
+            item_type: Type of items being matched ("figure" or "table")
 
         Returns:
             List of (item, caption) tuples, where caption may be None
@@ -174,12 +224,18 @@ class CaptionMatcher:
         if not captions:
             return [(item, None) for item in items]
 
+        # Select search direction based on item type
+        if item_type == "table":
+            search_direction = self.table_search_direction
+        else:
+            search_direction = self.figure_search_direction
+
         # Calculate all valid matches with distances
         matches = []
         for item in items:
             for caption in captions:
                 is_valid, distance = self._is_valid_match(
-                    item["bbox"], caption["bbox"]
+                    item["bbox"], caption["bbox"], search_direction
                 )
                 if is_valid:
                     matches.append((item, caption, distance))
@@ -219,6 +275,8 @@ class FigureTableExtractor:
         image_padding: int = 5,
         max_caption_distance: float = 100.0,
         dpi: int = 200,
+        figure_search_direction: SearchDirection = SearchDirection.BELOW,
+        table_search_direction: SearchDirection = SearchDirection.ABOVE,
     ):
         """
         Initialize the extractor.
@@ -227,11 +285,15 @@ class FigureTableExtractor:
             image_padding: Padding in pixels to add around cropped images
             max_caption_distance: Maximum vertical distance for caption matching
             dpi: DPI used for image conversion (for coordinate conversion)
+            figure_search_direction: Direction to search for figure captions
+            table_search_direction: Direction to search for table captions
         """
         self.image_padding = image_padding
         self.dpi = dpi
         self.caption_matcher = CaptionMatcher(
-            max_vertical_distance=max_caption_distance
+            max_vertical_distance=max_caption_distance,
+            figure_search_direction=figure_search_direction,
+            table_search_direction=table_search_direction,
         )
 
     def _pixel_to_pdf_coords(self, bbox: Dict[str, float]) -> fitz.Rect:
@@ -385,7 +447,7 @@ class FigureTableExtractor:
 
             # Match figures to captions
             figure_matches = self.caption_matcher.match_items_to_captions(
-                figures, figure_captions
+                figures, figure_captions, item_type="figure"
             )
 
             for figure, caption in figure_matches:
@@ -426,7 +488,7 @@ class FigureTableExtractor:
 
             # Match tables to captions
             table_matches = self.caption_matcher.match_items_to_captions(
-                tables, table_captions
+                tables, table_captions, item_type="table"
             )
 
             for table, caption in table_matches:
