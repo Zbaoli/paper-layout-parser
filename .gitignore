@@ -13,6 +13,9 @@ data/results/
 data/benchmark/
 data/output/
 
+# Benchmark data
+benchmark/
+
 # Models (large files)
 models/*.pt
 models/

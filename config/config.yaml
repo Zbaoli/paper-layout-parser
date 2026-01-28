@@ -130,6 +130,22 @@ vlm_annotation:
   # Annotation confidence threshold
   confidence_threshold: 0.7
 
+# Caption Matching Benchmark settings
+caption_benchmark:
+  # Default benchmark directory
+  benchmark_dir: "benchmark/caption-matching"
+
+  # Default confidence threshold for ground truth matches
+  confidence_threshold: 0.7
+
+  # Default output format for reports
+  output_format: "both"  # json, markdown, or both
+
+  # VLM settings for batch annotation
+  vlm:
+    default_backend: "openai"
+    skip_existing: true
+
 # Class colors (BGR format for OpenCV)
 class_colors:
   Title: [128, 0, 128]        # Purple
