@@ -5,10 +5,11 @@ Core logic for VLM-assisted figure-caption annotation.
 """
 
 import json
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import fitz  # PyMuPDF
 
@@ -85,6 +86,7 @@ class CaptionAnnotator:
         self,
         vlm_client: BaseVLMClient,
         dpi: int = 200,
+        max_workers: int = 5,
     ):
         """
         Initialize the annotator.
@@ -92,9 +94,11 @@ class CaptionAnnotator:
         Args:
             vlm_client: VLM client for analysis
             dpi: DPI used for image conversion (for coordinate reference)
+            max_workers: Maximum concurrent VLM requests per document
         """
         self.vlm_client = vlm_client
         self.dpi = dpi
+        self.max_workers = max_workers
         self.renderer = AnnotationRenderer()
 
     def annotate_from_detection(
@@ -140,8 +144,10 @@ class CaptionAnnotator:
             created_at=datetime.now().isoformat(),
         )
 
-        # Process each page
+        # Prepare page tasks (extract caption text first since pdf_doc is not thread-safe)
         pages_path = Path(pages_dir)
+        page_tasks: List[Tuple[int, List[Dict], str, Dict[int, str]]] = []
+
         for page_data in detection_data.get("pages", []):
             page_number = page_data.get("page_number", 1)
             detections = page_data.get("detections", [])
@@ -152,19 +158,52 @@ class CaptionAnnotator:
                 print(f"  Warning: Page image not found for page {page_number}")
                 continue
 
-            # Process page
-            page_annotation = self._annotate_page(
-                page_number=page_number,
-                detections=detections,
-                page_image=str(page_image),
-                annotated_dir=annotated_dir,
-                pdf_doc=pdf_doc,
-            )
+            # Pre-extract caption texts (not thread-safe operation)
+            caption_texts: Dict[int, str] = {}
+            if pdf_doc and page_number <= len(pdf_doc):
+                for i, det in enumerate(detections):
+                    if det.get("class_name", "") in self.CAPTION_CLASSES:
+                        caption_texts[i] = self._extract_text_from_bbox(
+                            pdf_doc[page_number - 1], det["bbox"]
+                        )
 
-            result.pages.append(page_annotation)
+            page_tasks.append((page_number, detections, str(page_image), caption_texts))
 
         if pdf_doc:
             pdf_doc.close()
+
+        # Process pages concurrently
+        if self.max_workers > 1 and len(page_tasks) > 1:
+            with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+                futures = {
+                    executor.submit(
+                        self._annotate_page_concurrent,
+                        page_number,
+                        detections,
+                        page_image,
+                        annotated_dir,
+                        caption_texts,
+                    ): page_number
+                    for page_number, detections, page_image, caption_texts in page_tasks
+                }
+
+                for future in as_completed(futures):
+                    page_number = futures[future]
+                    try:
+                        page_annotation = future.result()
+                        result.pages.append(page_annotation)
+                    except Exception as e:
+                        print(f"  Error processing page {page_number}: {e}")
+        else:
+            # Sequential processing
+            for page_number, detections, page_image, caption_texts in page_tasks:
+                page_annotation = self._annotate_page_concurrent(
+                    page_number, detections, page_image, annotated_dir, caption_texts
+                )
+                result.pages.append(page_annotation)
+
+        # Sort pages by page number
+        result.pages.sort(key=lambda p: p.page_number)
 
         # Save annotation result
         self._save_result(output_path, result)
@@ -191,6 +230,90 @@ class CaptionAnnotator:
 
         return None
 
+    def _annotate_page_concurrent(
+        self,
+        page_number: int,
+        detections: List[Dict[str, Any]],
+        page_image: str,
+        annotated_dir: Path,
+        caption_texts: Dict[int, str],
+    ) -> PageAnnotation:
+        """
+        Annotate a single page (thread-safe version with pre-extracted caption texts).
+
+        Args:
+            page_number: Page number
+            detections: List of detections on this page
+            page_image: Path to page image
+            annotated_dir: Directory for annotated images
+            caption_texts: Pre-extracted caption texts keyed by detection index
+        """
+        # Filter detections by type
+        figures = []
+        tables = []
+        captions = []
+        caption_indices = []  # Track original detection indices for caption text lookup
+
+        for i, det in enumerate(detections):
+            class_name = det.get("class_name", "")
+            if class_name in self.FIGURE_CLASSES:
+                figures.append(det)
+            elif class_name in self.TABLE_CLASSES:
+                tables.append(det)
+            elif class_name in self.CAPTION_CLASSES:
+                captions.append(det)
+                caption_indices.append(i)
+
+        # Assign IDs and use pre-extracted caption text
+        figures_with_id = [{"id": i + 1, "bbox": f["bbox"]} for i, f in enumerate(figures)]
+        tables_with_id = [{"id": i + 1, "bbox": t["bbox"]} for i, t in enumerate(tables)]
+        captions_with_id = []
+
+        for i, cap in enumerate(captions):
+            det_idx = caption_indices[i]
+            cap_data = {
+                "id": i + 1,
+                "bbox": cap["bbox"],
+                "text": caption_texts.get(det_idx, ""),
+            }
+            captions_with_id.append(cap_data)
+
+        # Create annotation result for empty pages
+        if not figures and not tables:
+            unmatched_caps = [f"cap_{page_number:02d}_{c['id']:02d}" for c in captions_with_id]
+            return PageAnnotation(
+                page_number=page_number,
+                unmatched_captions=unmatched_caps,
+            )
+
+        # Render annotated image
+        annotated_image_path = annotated_dir / f"page_{page_number:04d}_annotated.png"
+        self.renderer.render_annotated_image(
+            page_image,
+            figures_with_id,
+            tables_with_id,
+            captions_with_id,
+            str(annotated_image_path),
+        )
+
+        # Call VLM for analysis
+        vlm_response = self.vlm_client.analyze_page(
+            str(annotated_image_path),
+            figures_with_id,
+            tables_with_id,
+            captions_with_id,
+        )
+
+        # Process VLM response
+        return self._process_vlm_response(
+            page_number=page_number,
+            vlm_response=vlm_response,
+            figures=figures_with_id,
+            tables=tables_with_id,
+            captions=captions_with_id,
+            annotated_image_path=str(annotated_image_path),
+        )
+
     def _annotate_page(
         self,
         page_number: int,
@@ -199,7 +322,7 @@ class CaptionAnnotator:
         annotated_dir: Path,
         pdf_doc: Optional[fitz.Document] = None,
     ) -> PageAnnotation:
-        """Annotate a single page."""
+        """Annotate a single page (legacy method for backwards compatibility)."""
         # Filter detections by type
         figures = []
         tables = []

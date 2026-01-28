@@ -313,6 +313,8 @@ def run_caption_batch_annotation(
     vlm_backend: str,
     model: Optional[str],
     skip_existing: bool,
+    max_concurrent_docs: int = 3,
+    max_pages_per_doc: int = 5,
 ) -> None:
     """
     Batch annotate documents with VLM.
@@ -322,7 +324,11 @@ def run_caption_batch_annotation(
         vlm_backend: VLM backend to use
         model: Model name
         skip_existing: Whether to skip documents with existing annotations
+        max_concurrent_docs: Maximum concurrent documents to process
+        max_pages_per_doc: Maximum concurrent pages per document
     """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     from .vlm_annotator import CaptionAnnotator
     from .vlm_annotator.annotator import create_vlm_client
 
@@ -345,6 +351,7 @@ def run_caption_batch_annotation(
 
     print(f"Found {len(pdf_dirs)} documents to annotate")
     print(f"VLM backend: {vlm_backend}")
+    print(f"Concurrency: {max_concurrent_docs} docs x {max_pages_per_doc} pages")
 
     # Create VLM client
     try:
@@ -366,36 +373,47 @@ def run_caption_batch_annotation(
 
     print(f"Using model: {vlm_client.client_name}")
 
-    # Create annotator
-    annotator = CaptionAnnotator(vlm_client)
-
-    # Process each document
-    successful = 0
-    failed = 0
-
-    for i, pdf_dir in enumerate(pdf_dirs, 1):
-        print(f"\n[{i}/{len(pdf_dirs)}] Processing: {pdf_dir.name}")
-
+    def process_document(pdf_dir: Path) -> tuple:
+        """Process a single document. Returns (pdf_dir.name, success, matches, error)."""
         result_file = pdf_dir / "result.json"
         pages_dir = pdf_dir / "pages"
 
         if not pages_dir.exists():
-            print("  Warning: Pages directory not found, skipping")
-            failed += 1
-            continue
+            return (pdf_dir.name, False, 0, "Pages directory not found")
 
         try:
+            # Create annotator with page-level concurrency
+            annotator = CaptionAnnotator(vlm_client, max_workers=max_pages_per_doc)
             result = annotator.annotate_from_detection(
                 detection_result_path=str(result_file),
                 pages_dir=str(pages_dir),
                 output_dir=str(pdf_dir),
             )
             total_matches = sum(len(p.matches) for p in result.pages)
-            print(f"  Annotated: {total_matches} matches found")
-            successful += 1
+            return (pdf_dir.name, True, total_matches, None)
         except Exception as e:
-            print(f"  Error: {e}")
-            failed += 1
+            return (pdf_dir.name, False, 0, str(e))
+
+    # Process documents concurrently
+    successful = 0
+    failed = 0
+    completed = 0
+
+    print(f"\nStarting batch annotation...")
+
+    with ThreadPoolExecutor(max_workers=max_concurrent_docs) as executor:
+        futures = {executor.submit(process_document, pdf_dir): pdf_dir for pdf_dir in pdf_dirs}
+
+        for future in as_completed(futures):
+            completed += 1
+            name, success, matches, error = future.result()
+
+            if success:
+                print(f"[{completed}/{len(pdf_dirs)}] {name}: {matches} matches")
+                successful += 1
+            else:
+                print(f"[{completed}/{len(pdf_dirs)}] {name}: FAILED - {error}")
+                failed += 1
 
     print("\n" + "=" * 50)
     print("Batch Annotation Complete")
@@ -580,6 +598,18 @@ Examples:
         action="store_true",
         help="Skip documents that already have caption_annotations.json",
     )
+    annotate_batch_parser.add_argument(
+        "--concurrent-docs",
+        type=int,
+        default=3,
+        help="Maximum concurrent documents to process (default: 3)",
+    )
+    annotate_batch_parser.add_argument(
+        "--concurrent-pages",
+        type=int,
+        default=5,
+        help="Maximum concurrent pages per document (default: 5)",
+    )
 
     # Build command
     build_parser = subparsers.add_parser("build", help="Build caption matching benchmark dataset")
@@ -727,6 +757,8 @@ Examples:
             vlm_backend=args.vlm,
             model=args.model,
             skip_existing=args.skip_existing,
+            max_concurrent_docs=args.concurrent_docs,
+            max_pages_per_doc=args.concurrent_pages,
         )
 
     elif args.command == "build":
