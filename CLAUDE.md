@@ -36,17 +36,13 @@ uv run black src/ main.py --line-length 100
 uv run ruff check src/ main.py
 uv run ruff check src/ main.py --fix     # Auto-fix linting issues
 
-# Layout detection benchmark evaluation
-uv run python -m src.benchmark download --dataset doclaynet-small
-uv run python -m src.benchmark download --dataset doclaynet-small --mirror hf-mirror  # Use mirror (hf-mirror or openxlab)
-uv run python -m src.benchmark evaluate --dataset data/benchmark/doclaynet-small
-
 # Caption matching benchmark
-uv run python -m src.benchmark caption-build --input "data/output/*/caption_annotations.json" --output benchmark/caption-matching
-uv run python -m src.benchmark caption-evaluate --dataset benchmark/caption-matching
-uv run python -m src.benchmark caption-annotate-batch --input data/output --vlm openai
-uv run python -m src.benchmark caption-validate --dataset benchmark/caption-matching
-uv run python -m src.benchmark caption-report --inputs eval1.json eval2.json --output comparison.md
+uv run python -m src.benchmark annotate --input data/output/paper1
+uv run python -m src.benchmark annotate-batch --input data/output --vlm openai
+uv run python -m src.benchmark build --input "data/output/*/caption_annotations.json" --output benchmark/caption-matching
+uv run python -m src.benchmark evaluate --dataset benchmark/caption-matching
+uv run python -m src.benchmark validate --dataset benchmark/caption-matching
+uv run python -m src.benchmark report --inputs eval1.json eval2.json --output comparison.md
 ```
 
 ## Architecture
@@ -59,7 +55,7 @@ uv run python -m src.benchmark caption-report --inputs eval1.json eval2.json --o
 - `result_processor.py` - ResultProcessor: Structures detection results, calculates statistics, outputs JSON
 - `visualizer.py` - Visualizer: Draws bounding boxes with class-specific colors and labels (BGR format)
 - `figure_table_extractor.py` - FigureTableExtractor with CaptionMatcher: Crops figures/tables and matches captions by spatial proximity
-- `benchmark.py` - BenchmarkEvaluator: DocLayNet dataset evaluation with precision/recall/F1 metrics
+- `benchmark.py` - Caption matching benchmark CLI: VLM annotation and evaluation
 - `caption_matching/` - Caption matching evaluation module:
   - `evaluator.py` - CaptionMatchingEvaluator: Single-document evaluation against VLM ground truth
   - `benchmark.py` - CaptionMatchingBenchmark, BatchEvaluator: Batch evaluation on benchmark datasets
@@ -116,6 +112,6 @@ benchmark/
 
 **Workflow:**
 1. Process PDFs with `--extract` to generate detection results
-2. Generate VLM annotations with `caption-annotate-batch` or `annotate` command
-3. Build benchmark dataset with `caption-build`
-4. Run evaluation with `caption-evaluate`
+2. Generate VLM annotations with `annotate-batch` or `annotate` command
+3. Build benchmark dataset with `build`
+4. Run evaluation with `evaluate`
