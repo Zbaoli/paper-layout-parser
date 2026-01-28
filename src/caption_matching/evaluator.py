@@ -2,6 +2,7 @@
 Caption Matching Evaluator
 
 Evaluates the CaptionMatcher algorithm against VLM-generated ground truth.
+Uses bbox-based matching instead of ID-based matching for accurate evaluation.
 """
 
 import json
@@ -10,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from .dataset import AnnotationDataset
+from .dataset import AnnotationDataset, GroundTruthMatch
 
 
 @dataclass
@@ -24,6 +25,8 @@ class MatchComparison:
     ground_truth_caption: Optional[str]
     is_correct: bool
     error_type: Optional[str] = None  # "false_positive", "false_negative", "wrong_match"
+    figure_iou: float = 0.0  # IoU between predicted and ground truth figure bbox
+    caption_iou: float = 0.0  # IoU between predicted and ground truth caption bbox
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -34,6 +37,8 @@ class MatchComparison:
             "ground_truth_caption": self.ground_truth_caption,
             "is_correct": self.is_correct,
             "error_type": self.error_type,
+            "figure_iou": round(self.figure_iou, 4),
+            "caption_iou": round(self.caption_iou, 4),
         }
 
 
@@ -97,7 +102,11 @@ class EvaluationResult:
 
 
 class CaptionMatchingEvaluator:
-    """Evaluates caption matching predictions against ground truth."""
+    """Evaluates caption matching predictions against ground truth using bbox matching."""
+
+    # IoU thresholds for matching
+    FIGURE_IOU_THRESHOLD = 0.5  # Minimum IoU to consider figure bbox matched
+    CAPTION_IOU_THRESHOLD = 0.5  # Minimum IoU to consider caption bbox matched
 
     def __init__(self, confidence_threshold: float = 0.7):
         """
@@ -108,13 +117,110 @@ class CaptionMatchingEvaluator:
         """
         self.confidence_threshold = confidence_threshold
 
+    @staticmethod
+    def _calculate_iou(bbox1: Dict[str, float], bbox2: Dict[str, float]) -> float:
+        """
+        Calculate Intersection over Union (IoU) between two bboxes.
+
+        Args:
+            bbox1: First bbox with keys x1, y1, x2, y2
+            bbox2: Second bbox with keys x1, y1, x2, y2
+
+        Returns:
+            IoU value between 0 and 1
+        """
+        # Calculate intersection
+        x1 = max(bbox1["x1"], bbox2["x1"])
+        y1 = max(bbox1["y1"], bbox2["y1"])
+        x2 = min(bbox1["x2"], bbox2["x2"])
+        y2 = min(bbox1["y2"], bbox2["y2"])
+
+        if x2 <= x1 or y2 <= y1:
+            return 0.0
+
+        intersection = (x2 - x1) * (y2 - y1)
+
+        # Calculate union
+        area1 = (bbox1["x2"] - bbox1["x1"]) * (bbox1["y2"] - bbox1["y1"])
+        area2 = (bbox2["x2"] - bbox2["x1"]) * (bbox2["y2"] - bbox2["y1"])
+        union = area1 + area2 - intersection
+
+        if union <= 0:
+            return 0.0
+
+        return intersection / union
+
+    def _find_matching_prediction(
+        self,
+        gt_match: GroundTruthMatch,
+        predictions: List[Dict[str, Any]],
+    ) -> Tuple[Optional[Dict[str, Any]], float]:
+        """
+        Find the prediction that best matches a ground truth figure by bbox IoU.
+
+        Args:
+            gt_match: Ground truth match containing figure_bbox
+            predictions: List of prediction dicts with item_bbox
+
+        Returns:
+            Tuple of (best matching prediction or None, IoU score)
+        """
+        best_pred = None
+        best_iou = 0.0
+
+        for pred in predictions:
+            # Filter by page number
+            if pred.get("page_number") != gt_match.page_number:
+                continue
+
+            pred_bbox = pred.get("item_bbox")
+            if not pred_bbox:
+                continue
+
+            iou = self._calculate_iou(gt_match.figure_bbox, pred_bbox)
+            if iou > best_iou:
+                best_iou = iou
+                best_pred = pred
+
+        if best_iou >= self.FIGURE_IOU_THRESHOLD:
+            return best_pred, best_iou
+
+        return None, best_iou
+
+    def _check_caption_match(
+        self,
+        gt_caption_bbox: Optional[Dict[str, float]],
+        pred_caption_bbox: Optional[Dict[str, float]],
+    ) -> Tuple[bool, float]:
+        """
+        Check if predicted caption bbox matches ground truth caption bbox.
+
+        Args:
+            gt_caption_bbox: Ground truth caption bbox (or None if no caption expected)
+            pred_caption_bbox: Predicted caption bbox (or None if no caption predicted)
+
+        Returns:
+            Tuple of (is_match, IoU score)
+        """
+        # Both None = correct match (no caption expected, none predicted)
+        if gt_caption_bbox is None and pred_caption_bbox is None:
+            return True, 1.0
+
+        # One is None, other is not = mismatch
+        if gt_caption_bbox is None or pred_caption_bbox is None:
+            return False, 0.0
+
+        # Both have values - compare by IoU
+        iou = self._calculate_iou(gt_caption_bbox, pred_caption_bbox)
+        return iou >= self.CAPTION_IOU_THRESHOLD, iou
+
     def evaluate(
         self,
         ground_truth: AnnotationDataset,
         predictions: Dict[str, Any],
     ) -> EvaluationResult:
         """
-        Evaluate predictions against ground truth.
+        Evaluate predictions against ground truth using bbox matching.
 
         Args:
             ground_truth: VLM-annotated ground truth dataset
@@ -134,8 +240,8 @@ class CaptionMatchingEvaluator:
         # Get ground truth matches above confidence threshold
         gt_matches = ground_truth.get_high_confidence_matches(self.confidence_threshold)
 
-        # Build prediction mapping from extraction metadata
-        pred_map = self._build_prediction_map(predictions)
+        # Get all predictions (figures and tables)
+        all_predictions = predictions.get("figures", []) + predictions.get("tables", [])
 
         # Count figures and tables
         figure_count = sum(1 for m in gt_matches if m.figure_type == "figure")
@@ -148,31 +254,43 @@ class CaptionMatchingEvaluator:
         table_comparisons = []
 
         for gt_match in gt_matches:
-            fig_id = gt_match.figure_id
-            gt_caption = gt_match.caption_id
-            pred_caption = pred_map.get(fig_id)
+            # Find matching prediction by figure bbox
+            matched_pred, figure_iou = self._find_matching_prediction(gt_match, all_predictions)
 
-            # Determine correctness
-            is_correct = self._compare_captions(pred_caption, gt_caption)
+            # Determine predicted caption
+            pred_caption_bbox = None
+            pred_caption_id = None
+            if matched_pred:
+                pred_caption_bbox = matched_pred.get("caption_bbox")
+                if pred_caption_bbox:
+                    pred_caption_id = f"matched (IoU-based)"
+
+            # Check if caption matches
+            is_correct, caption_iou = self._check_caption_match(
+                gt_match.caption_bbox,
+                pred_caption_bbox,
+            )
 
             # Determine error type
             error_type = None
             if not is_correct:
-                if gt_caption is None and pred_caption is not None:
+                if gt_match.caption_bbox is None and pred_caption_bbox is not None:
                     error_type = "false_positive"
-                elif gt_caption is not None and pred_caption is None:
+                elif gt_match.caption_bbox is not None and pred_caption_bbox is None:
                     error_type = "false_negative"
                 else:
                     error_type = "wrong_match"
 
             comparison = MatchComparison(
-                figure_id=fig_id,
+                figure_id=gt_match.figure_id,
                 figure_type=gt_match.figure_type,
                 page_number=gt_match.page_number,
-                predicted_caption=pred_caption,
-                ground_truth_caption=gt_caption,
+                predicted_caption=pred_caption_id,
+                ground_truth_caption=gt_match.caption_id,
                 is_correct=is_correct,
                 error_type=error_type,
+                figure_iou=figure_iou,
+                caption_iou=caption_iou,
             )
 
             result.comparisons.append(comparison)
@@ -184,7 +302,7 @@ class CaptionMatchingEvaluator:
 
             # Update counts
             if is_correct:
-                if gt_caption is not None:
+                if gt_match.caption_bbox is not None:
                     result.true_positives += 1
                 else:
                     result.correct_no_caption += 1
@@ -212,66 +330,6 @@ class CaptionMatchingEvaluator:
         result.error_analysis = self._analyze_errors(result.comparisons)
 
         return result
-
-    def _build_prediction_map(self, predictions: Dict[str, Any]) -> Dict[str, Optional[str]]:
-        """
-        Build mapping from figure IDs to predicted caption IDs.
-
-        Args:
-            predictions: Detection result with extraction metadata
-
-        Returns:
-            Dict mapping figure_id to caption_id
-        """
-        pred_map = {}
-
-        # Try to load from extraction metadata if available
-        figures = predictions.get("figures", [])
-        tables = predictions.get("tables", [])
-
-        for fig in figures:
-            fig_id = fig.get("item_id", "")
-            # Convert item_id format (fig_01_01 -> fig_01_01)
-            caption_id = None
-            if fig.get("caption_bbox"):
-                # Derive caption ID from figure ID
-                parts = fig_id.split("_")
-                if len(parts) >= 3:
-                    page_num = parts[1]
-                    # Caption ID follows a similar pattern
-                    caption_id = f"cap_{page_num}_{parts[2]}"
-
-            pred_map[fig_id] = caption_id
-
-        for tbl in tables:
-            tbl_id = tbl.get("item_id", "")
-            caption_id = None
-            if tbl.get("caption_bbox"):
-                parts = tbl_id.split("_")
-                if len(parts) >= 3:
-                    page_num = parts[1]
-                    caption_id = f"cap_{page_num}_{parts[2]}"
-
-            pred_map[tbl_id] = caption_id
-
-        return pred_map
-
-    def _compare_captions(
-        self,
-        predicted: Optional[str],
-        ground_truth: Optional[str],
-    ) -> bool:
-        """Compare predicted and ground truth caption IDs."""
-        # Both None = correct (no caption expected, none predicted)
-        if predicted is None and ground_truth is None:
-            return True
-
-        # One is None, other is not = incorrect
-        if predicted is None or ground_truth is None:
-            return False
-
-        # Both have values - compare
-        return predicted == ground_truth
 
     def _calculate_metrics(
         self,
