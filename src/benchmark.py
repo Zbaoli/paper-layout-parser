@@ -124,11 +124,7 @@ def compute_precision_recall_f1(
         if (true_positives + false_negatives) > 0
         else 0.0
     )
-    f1 = (
-        2 * precision * recall / (precision + recall)
-        if (precision + recall) > 0
-        else 0.0
-    )
+    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
 
     return BenchmarkMetrics(precision=precision, recall=recall, f1=f1)
 
@@ -653,9 +649,7 @@ class BenchmarkEvaluator:
         total_tp_all = total_tp["figure"] + total_tp["table"]
         total_fp_all = total_fp["figure"] + total_fp["table"]
         total_fn_all = total_fn["figure"] + total_fn["table"]
-        end_to_end_metrics = compute_precision_recall_f1(
-            total_tp_all, total_fp_all, total_fn_all
-        )
+        end_to_end_metrics = compute_precision_recall_f1(total_tp_all, total_fp_all, total_fn_all)
 
         return BenchmarkResult(
             dataset="DocLayNet",
@@ -742,6 +736,7 @@ def download_doclaynet_small(output_dir: str) -> bool:
     except Exception as e:
         print(f"Download failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -854,6 +849,7 @@ def download_doclaynet(output_dir: str, split: str = "test") -> bool:
     except Exception as e:
         print(f"Download failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -1126,13 +1122,15 @@ def generate_comparison_report(input_files: List[str], output_path: str) -> None
             f"{metrics.get('recall', 0):.4f} | {metrics.get('f1', 0):.4f} |"
         )
 
-    lines.extend([
-        "",
-        "## Table Detection",
-        "",
-        "| Model | Precision | Recall | F1 |",
-        "|-------|-----------|--------|-----|",
-    ])
+    lines.extend(
+        [
+            "",
+            "## Table Detection",
+            "",
+            "| Model | Precision | Recall | F1 |",
+            "|-------|-----------|--------|-----|",
+        ]
+    )
 
     for r in results:
         model = r.get("model", "Unknown")
@@ -1142,13 +1140,15 @@ def generate_comparison_report(input_files: List[str], output_path: str) -> None
             f"{metrics.get('recall', 0):.4f} | {metrics.get('f1', 0):.4f} |"
         )
 
-    lines.extend([
-        "",
-        "## End-to-End (Combined)",
-        "",
-        "| Model | Precision | Recall | F1 |",
-        "|-------|-----------|--------|-----|",
-    ])
+    lines.extend(
+        [
+            "",
+            "## End-to-End (Combined)",
+            "",
+            "| Model | Precision | Recall | F1 |",
+            "|-------|-----------|--------|-----|",
+        ]
+    )
 
     for r in results:
         model = r.get("model", "Unknown")
@@ -1158,21 +1158,25 @@ def generate_comparison_report(input_files: List[str], output_path: str) -> None
             f"{metrics.get('recall', 0):.4f} | {metrics.get('f1', 0):.4f} |"
         )
 
-    lines.extend([
-        "",
-        "## Detailed Breakdown",
-        "",
-    ])
+    lines.extend(
+        [
+            "",
+            "## Detailed Breakdown",
+            "",
+        ]
+    )
 
     for r in results:
         model = r.get("model", "Unknown")
         breakdown = r.get("per_class_breakdown", {})
-        lines.extend([
-            f"### {model}",
-            "",
-            "| Class | TP | FP | FN |",
-            "|-------|-----|-----|-----|",
-        ])
+        lines.extend(
+            [
+                f"### {model}",
+                "",
+                "| Class | TP | FP | FN |",
+                "|-------|-----|-----|-----|",
+            ]
+        )
         for class_name, counts in breakdown.items():
             lines.append(
                 f"| {class_name} | {counts.get('true_positives', 0)} | "
@@ -1190,6 +1194,325 @@ def generate_comparison_report(input_files: List[str], output_path: str) -> None
     print(f"Comparison report saved to: {output_file}")
 
 
+def run_caption_build(
+    input_paths: List[str],
+    output_dir: str,
+    name: str,
+    version: str,
+) -> None:
+    """
+    Build caption matching benchmark dataset.
+
+    Args:
+        input_paths: List of paths or glob patterns to caption_annotations.json files
+        output_dir: Output directory for benchmark dataset
+        name: Dataset name
+        version: Dataset version
+    """
+    import glob
+
+    from .caption_matching import DatasetBuilder
+
+    # Expand glob patterns
+    annotation_files = []
+    for pattern in input_paths:
+        matches = glob.glob(pattern, recursive=True)
+        if matches:
+            annotation_files.extend(matches)
+        elif Path(pattern).exists():
+            annotation_files.append(pattern)
+        else:
+            print(f"Warning: No files found for pattern: {pattern}")
+
+    if not annotation_files:
+        print("Error: No annotation files found")
+        sys.exit(1)
+
+    print(f"Building benchmark dataset from {len(annotation_files)} annotation files...")
+
+    builder = DatasetBuilder(name=name, version=version)
+    dataset = builder.build_from_annotations(
+        annotation_paths=annotation_files,
+        output_dir=output_dir,
+        copy_files=True,
+    )
+
+    print("\n" + "=" * 50)
+    print("Benchmark Dataset Created")
+    print("=" * 50)
+    print(f"Name: {dataset.name}")
+    print(f"Version: {dataset.version}")
+    print(f"Documents: {len(dataset.documents)}")
+    print(f"Output: {output_dir}")
+    print(f"\nDataset manifest: {output_dir}/dataset.json")
+
+
+def run_caption_benchmark_evaluation(
+    dataset_path: str,
+    predictions_dir: Optional[str],
+    output_path: Optional[str],
+    confidence_threshold: float,
+    output_format: str,
+) -> None:
+    """
+    Run caption matching benchmark evaluation.
+
+    Args:
+        dataset_path: Path to benchmark dataset directory
+        predictions_dir: Optional directory containing prediction files
+        output_path: Output path for evaluation report
+        confidence_threshold: Minimum confidence for ground truth matches
+        output_format: Output format (json, markdown, both)
+    """
+    from .caption_matching import BenchmarkReporter, CaptionMatchingBenchmark
+
+    benchmark = CaptionMatchingBenchmark(
+        benchmark_dir=dataset_path,
+        confidence_threshold=confidence_threshold,
+    )
+
+    print(f"Loading dataset from: {dataset_path}")
+    print(f"Confidence threshold: {confidence_threshold}")
+
+    try:
+        summary = benchmark.evaluate(predictions_dir=predictions_dir)
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+
+    # Determine output paths
+    results_dir = Path(dataset_path) / "results"
+    results_dir.mkdir(parents=True, exist_ok=True)
+
+    if output_path:
+        base_output = Path(output_path).stem
+        output_dir = Path(output_path).parent
+    else:
+        base_output = "eval_report"
+        output_dir = results_dir
+
+    reporter = BenchmarkReporter()
+
+    # Generate reports
+    if output_format in ("json", "both"):
+        json_path = output_dir / f"{base_output}.json"
+        reporter.generate_json_report(summary, str(json_path))
+        print(f"JSON report saved to: {json_path}")
+
+    if output_format in ("markdown", "both"):
+        md_path = output_dir / f"{base_output}.md"
+        reporter.generate_markdown_report(summary, str(md_path))
+        print(f"Markdown report saved to: {md_path}")
+
+    # Print summary
+    print("\n" + "=" * 50)
+    print("Caption Matching Benchmark Results")
+    print("=" * 50)
+    print(f"Dataset: {summary.dataset_name} v{summary.dataset_version}")
+    print(f"Documents: {summary.successful_evaluations}/{summary.total_documents} evaluated")
+    print("\nOverall Metrics:")
+    print(f"  Precision: {summary.precision:.4f}")
+    print(f"  Recall: {summary.recall:.4f}")
+    print(f"  F1 Score: {summary.f1:.4f}")
+    print("\nDetailed Counts:")
+    print(f"  True Positives: {summary.total_true_positives}")
+    print(f"  False Positives: {summary.total_false_positives}")
+    print(f"  False Negatives: {summary.total_false_negatives}")
+
+    if summary.figure_metrics:
+        print("\nFigure Matching:")
+        print(f"  F1: {summary.figure_metrics.get('f1', 0):.4f}")
+
+    if summary.table_metrics:
+        print("\nTable Matching:")
+        print(f"  F1: {summary.table_metrics.get('f1', 0):.4f}")
+
+
+def run_caption_batch_annotation(
+    input_dir: str,
+    vlm_backend: str,
+    model: Optional[str],
+    skip_existing: bool,
+) -> None:
+    """
+    Batch annotate documents with VLM.
+
+    Args:
+        input_dir: Path to data/output directory
+        vlm_backend: VLM backend to use
+        model: Model name
+        skip_existing: Whether to skip documents with existing annotations
+    """
+    from .vlm_annotator import CaptionAnnotator
+    from .vlm_annotator.annotator import create_vlm_client
+
+    input_path = Path(input_dir)
+
+    # Find all PDF output directories
+    pdf_dirs = []
+    for result_file in input_path.glob("*/result.json"):
+        pdf_dir = result_file.parent
+        if skip_existing and (pdf_dir / "caption_annotations.json").exists():
+            print(f"Skipping {pdf_dir.name} (already annotated)")
+            continue
+        pdf_dirs.append(pdf_dir)
+
+    if not pdf_dirs:
+        print("No documents found to annotate")
+        if skip_existing:
+            print("(All documents may already have annotations)")
+        sys.exit(0)
+
+    print(f"Found {len(pdf_dirs)} documents to annotate")
+    print(f"VLM backend: {vlm_backend}")
+
+    # Create VLM client
+    try:
+        vlm_client = create_vlm_client(backend=vlm_backend, model=model)
+    except ImportError as e:
+        print(f"Error: {e}")
+        print("Install VLM dependencies with: uv sync --extra vlm")
+        sys.exit(1)
+
+    if not vlm_client.is_available():
+        print(f"VLM backend '{vlm_backend}' is not available.")
+        if vlm_backend == "ollama":
+            print("Make sure Ollama is running: ollama serve")
+        elif vlm_backend == "openai":
+            print("Set OPENAI_API_KEY environment variable")
+        elif vlm_backend == "anthropic":
+            print("Set ANTHROPIC_API_KEY environment variable")
+        sys.exit(1)
+
+    print(f"Using model: {vlm_client.client_name}")
+
+    # Create annotator
+    annotator = CaptionAnnotator(vlm_client)
+
+    # Process each document
+    successful = 0
+    failed = 0
+
+    for i, pdf_dir in enumerate(pdf_dirs, 1):
+        print(f"\n[{i}/{len(pdf_dirs)}] Processing: {pdf_dir.name}")
+
+        result_file = pdf_dir / "result.json"
+        pages_dir = pdf_dir / "pages"
+
+        if not pages_dir.exists():
+            print("  Warning: Pages directory not found, skipping")
+            failed += 1
+            continue
+
+        try:
+            result = annotator.annotate_from_detection(
+                detection_result_path=str(result_file),
+                pages_dir=str(pages_dir),
+                output_dir=str(pdf_dir),
+            )
+            total_matches = sum(len(p.matches) for p in result.pages)
+            print(f"  Annotated: {total_matches} matches found")
+            successful += 1
+        except Exception as e:
+            print(f"  Error: {e}")
+            failed += 1
+
+    print("\n" + "=" * 50)
+    print("Batch Annotation Complete")
+    print("=" * 50)
+    print(f"Successful: {successful}")
+    print(f"Failed: {failed}")
+
+
+def run_caption_validate(dataset_path: str) -> None:
+    """
+    Validate caption matching benchmark dataset.
+
+    Args:
+        dataset_path: Path to benchmark dataset directory
+    """
+    from .caption_matching import CaptionMatchingBenchmark
+
+    benchmark = CaptionMatchingBenchmark(benchmark_dir=dataset_path)
+
+    print(f"Validating dataset: {dataset_path}")
+
+    report = benchmark.validate_dataset()
+
+    print("\n" + "=" * 50)
+    print("Dataset Validation Report")
+    print("=" * 50)
+
+    if report["valid"]:
+        print("Status: VALID")
+    else:
+        print("Status: INVALID")
+
+    print("\nStatistics:")
+    for key, value in report["statistics"].items():
+        print(f"  {key}: {value}")
+
+    if report["errors"]:
+        print("\nErrors:")
+        for error in report["errors"]:
+            print(f"  - {error}")
+
+    if report["warnings"]:
+        print("\nWarnings:")
+        for warning in report["warnings"]:
+            print(f"  - {warning}")
+
+    sys.exit(0 if report["valid"] else 1)
+
+
+def run_caption_comparison_report(
+    input_paths: List[str],
+    labels: Optional[List[str]],
+    output_path: str,
+) -> None:
+    """
+    Generate comparison report from multiple evaluation results.
+
+    Args:
+        input_paths: Paths to evaluation result JSON files
+        labels: Optional labels for each result
+        output_path: Output path for comparison report
+    """
+    from .caption_matching import BenchmarkReporter, load_summary_from_json
+
+    # Load summaries
+    summaries = []
+    for path in input_paths:
+        if not Path(path).exists():
+            print(f"Warning: File not found: {path}")
+            continue
+
+        try:
+            summary = load_summary_from_json(path)
+            summaries.append(summary)
+        except Exception as e:
+            print(f"Warning: Failed to load {path}: {e}")
+
+    if not summaries:
+        print("Error: No valid evaluation reports found")
+        sys.exit(1)
+
+    # Use provided labels or generate defaults
+    if labels and len(labels) >= len(summaries):
+        result_labels = labels[: len(summaries)]
+    else:
+        result_labels = [Path(p).stem for p in input_paths[: len(summaries)]]
+
+    reporter = BenchmarkReporter()
+    report_path = reporter.generate_comparison_report(
+        summaries=summaries,
+        labels=result_labels,
+        output_path=output_path,
+    )
+
+    print(f"Comparison report saved to: {report_path}")
+
+
 def main():
     """CLI entry point for benchmark module."""
     parser = argparse.ArgumentParser(
@@ -1200,9 +1523,7 @@ def main():
     subparsers = parser.add_subparsers(dest="command", help="Command to run")
 
     # Download command
-    download_parser = subparsers.add_parser(
-        "download", help="Download DocLayNet dataset"
-    )
+    download_parser = subparsers.add_parser("download", help="Download DocLayNet dataset")
     download_parser.add_argument(
         "--dataset",
         type=str,
@@ -1232,9 +1553,7 @@ def main():
     )
 
     # Evaluate command
-    eval_parser = subparsers.add_parser(
-        "evaluate", help="Run benchmark evaluation"
-    )
+    eval_parser = subparsers.add_parser("evaluate", help="Run benchmark evaluation")
     eval_parser.add_argument(
         "--dataset",
         type=str,
@@ -1268,9 +1587,7 @@ def main():
     )
 
     # Report command
-    report_parser = subparsers.add_parser(
-        "report", help="Display benchmark report"
-    )
+    report_parser = subparsers.add_parser("report", help="Display benchmark report")
     report_parser.add_argument(
         "--input",
         type=str,
@@ -1361,6 +1678,137 @@ def main():
         help="Minimum confidence threshold for ground truth matches (default: 0.7)",
     )
 
+    # Caption benchmark: build command
+    caption_build_parser = subparsers.add_parser(
+        "caption-build", help="Build caption matching benchmark dataset"
+    )
+    caption_build_parser.add_argument(
+        "--input",
+        type=str,
+        nargs="+",
+        required=True,
+        help="Paths to caption_annotations.json files or glob patterns",
+    )
+    caption_build_parser.add_argument(
+        "--output",
+        type=str,
+        default="benchmark/caption-matching",
+        help="Output directory for benchmark dataset",
+    )
+    caption_build_parser.add_argument(
+        "--name",
+        type=str,
+        default="caption-matching-v1",
+        help="Dataset name",
+    )
+    caption_build_parser.add_argument(
+        "--version",
+        type=str,
+        default="1.0.0",
+        help="Dataset version",
+    )
+
+    # Caption benchmark: evaluate command
+    caption_eval_parser = subparsers.add_parser(
+        "caption-evaluate", help="Evaluate caption matching on benchmark dataset"
+    )
+    caption_eval_parser.add_argument(
+        "--dataset",
+        type=str,
+        default="benchmark/caption-matching",
+        help="Path to benchmark dataset directory",
+    )
+    caption_eval_parser.add_argument(
+        "--predictions",
+        type=str,
+        default=None,
+        help="Directory containing prediction files (optional)",
+    )
+    caption_eval_parser.add_argument(
+        "--output",
+        type=str,
+        default=None,
+        help="Output path for evaluation report",
+    )
+    caption_eval_parser.add_argument(
+        "--confidence",
+        type=float,
+        default=0.7,
+        help="Minimum confidence threshold for ground truth matches",
+    )
+    caption_eval_parser.add_argument(
+        "--format",
+        type=str,
+        choices=["json", "markdown", "both"],
+        default="both",
+        help="Output format (default: both)",
+    )
+
+    # Caption benchmark: batch annotate command
+    caption_annotate_parser = subparsers.add_parser(
+        "caption-annotate-batch", help="Batch annotate documents with VLM"
+    )
+    caption_annotate_parser.add_argument(
+        "--input",
+        type=str,
+        required=True,
+        help="Path to data/output directory containing processed PDFs",
+    )
+    caption_annotate_parser.add_argument(
+        "--vlm",
+        type=str,
+        default="ollama",
+        choices=["ollama", "openai", "anthropic"],
+        help="VLM backend to use",
+    )
+    caption_annotate_parser.add_argument(
+        "--model",
+        type=str,
+        default=None,
+        help="Model name (default: backend-specific default)",
+    )
+    caption_annotate_parser.add_argument(
+        "--skip-existing",
+        action="store_true",
+        help="Skip documents that already have caption_annotations.json",
+    )
+
+    # Caption benchmark: validate command
+    caption_validate_parser = subparsers.add_parser(
+        "caption-validate", help="Validate caption matching benchmark dataset"
+    )
+    caption_validate_parser.add_argument(
+        "--dataset",
+        type=str,
+        default="benchmark/caption-matching",
+        help="Path to benchmark dataset directory",
+    )
+
+    # Caption benchmark: report command
+    caption_report_parser = subparsers.add_parser(
+        "caption-report", help="Generate comparison report from multiple evaluation results"
+    )
+    caption_report_parser.add_argument(
+        "--inputs",
+        type=str,
+        nargs="+",
+        required=True,
+        help="Paths to evaluation result JSON files",
+    )
+    caption_report_parser.add_argument(
+        "--labels",
+        type=str,
+        nargs="+",
+        default=None,
+        help="Labels for each result (optional)",
+    )
+    caption_report_parser.add_argument(
+        "--output",
+        type=str,
+        default="benchmark/caption-matching/results/comparison.md",
+        help="Output path for comparison report",
+    )
+
     args = parser.parse_args()
 
     if args.command == "download":
@@ -1431,6 +1879,41 @@ def main():
             detection_path=args.detection,
             output_path=args.output,
             confidence_threshold=args.confidence,
+        )
+
+    elif args.command == "caption-build":
+        run_caption_build(
+            input_paths=args.input,
+            output_dir=args.output,
+            name=args.name,
+            version=args.version,
+        )
+
+    elif args.command == "caption-evaluate":
+        run_caption_benchmark_evaluation(
+            dataset_path=args.dataset,
+            predictions_dir=args.predictions,
+            output_path=args.output,
+            confidence_threshold=args.confidence,
+            output_format=args.format,
+        )
+
+    elif args.command == "caption-annotate-batch":
+        run_caption_batch_annotation(
+            input_dir=args.input,
+            vlm_backend=args.vlm,
+            model=args.model,
+            skip_existing=args.skip_existing,
+        )
+
+    elif args.command == "caption-validate":
+        run_caption_validate(dataset_path=args.dataset)
+
+    elif args.command == "caption-report":
+        run_caption_comparison_report(
+            input_paths=args.inputs,
+            labels=args.labels,
+            output_path=args.output,
         )
 
     else:
