@@ -11,6 +11,7 @@ data/papers/
 data/images/
 data/results/
 data/benchmark/
+data/output/
 
 # Models (large files)
 models/*.pt
