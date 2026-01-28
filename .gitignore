@@ -13,6 +13,8 @@ data/results/
 data/benchmark/
 data/output/
 
+label_studio_export/
+
 # Benchmark data
 benchmark/
 
