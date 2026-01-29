@@ -1,5 +1,5 @@
 """
-PDF Document Layout Detection
+DocLayout - PDF Document Layout Detection
 
 This package provides tools for detecting document layout elements
 in PDF files using DocLayout-YOLO.
@@ -23,7 +23,7 @@ from .visualization.legend import LegendRenderer
 # Backward compatibility alias
 Visualizer = BoundingBoxRenderer
 
-__version__ = "2.0.0"
+__version__ = "2.1.0"
 __all__ = [
     # Core
     "PDFConverter",
