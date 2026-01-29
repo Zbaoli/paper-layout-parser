@@ -17,7 +17,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from .base import BaseVLMClient, VLMResponse
-from .image_renderer import AnnotationRenderer
+
+# Import from unified visualization module
+from ..visualization import BoundingBoxRenderer, NumberedLabelStrategy, LegendRenderer
 
 
 @dataclass
@@ -102,7 +104,12 @@ class CaptionAnnotator:
         self.vlm_client = vlm_client
         self.dpi = dpi
         self.max_workers = max_workers
-        self.renderer = AnnotationRenderer()
+        # Use unified renderer with numbered label strategy
+        self.renderer = BoundingBoxRenderer(
+            label_strategy=NumberedLabelStrategy(),
+            line_thickness=3,
+            font_scale=0.8,
+        )
 
     def annotate_from_detection(
         self,
@@ -268,8 +275,8 @@ class CaptionAnnotator:
                 caption_indices.append(i)
 
         # Assign IDs and use pre-extracted caption text
-        figures_with_id = [{"id": i + 1, "bbox": f["bbox"]} for i, f in enumerate(figures)]
-        tables_with_id = [{"id": i + 1, "bbox": t["bbox"]} for i, t in enumerate(tables)]
+        figures_with_id = [{"id": i + 1, "bbox": f["bbox"], "item_type": "figure"} for i, f in enumerate(figures)]
+        tables_with_id = [{"id": i + 1, "bbox": t["bbox"], "item_type": "table"} for i, t in enumerate(tables)]
         captions_with_id = []
 
         for i, cap in enumerate(captions):
@@ -278,6 +285,7 @@ class CaptionAnnotator:
                 "id": i + 1,
                 "bbox": cap["bbox"],
                 "text": caption_texts.get(det_idx, ""),
+                "item_type": "caption",
             }
             captions_with_id.append(cap_data)
 
@@ -289,7 +297,7 @@ class CaptionAnnotator:
                 unmatched_captions=unmatched_caps,
             )
 
-        # Render annotated image
+        # Render annotated image using unified renderer
         annotated_image_path = annotated_dir / f"page_{page_number:04d}_annotated.png"
         self.renderer.render_annotated_image(
             page_image,
@@ -341,12 +349,12 @@ class CaptionAnnotator:
                 captions.append(det)
 
         # Assign IDs and extract caption text
-        figures_with_id = [{"id": i + 1, "bbox": f["bbox"]} for i, f in enumerate(figures)]
-        tables_with_id = [{"id": i + 1, "bbox": t["bbox"]} for i, t in enumerate(tables)]
+        figures_with_id = [{"id": i + 1, "bbox": f["bbox"], "item_type": "figure"} for i, f in enumerate(figures)]
+        tables_with_id = [{"id": i + 1, "bbox": t["bbox"], "item_type": "table"} for i, t in enumerate(tables)]
         captions_with_id = []
 
         for i, cap in enumerate(captions):
-            cap_data = {"id": i + 1, "bbox": cap["bbox"], "text": ""}
+            cap_data = {"id": i + 1, "bbox": cap["bbox"], "text": "", "item_type": "caption"}
 
             # Extract caption text if PDF is available
             if pdf_doc and page_number <= len(pdf_doc):
@@ -365,7 +373,7 @@ class CaptionAnnotator:
                 unmatched_captions=unmatched_caps,
             )
 
-        # Render annotated image
+        # Render annotated image using unified renderer
         annotated_image_path = annotated_dir / f"page_{page_number:04d}_annotated.png"
         self.renderer.render_annotated_image(
             page_image,
