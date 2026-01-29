@@ -12,7 +12,7 @@ DocLayout-YOLO based PDF document layout detection system. Converts PDF pages to
 # Install dependencies
 uv sync
 
-# Install with dev dependencies (black, ruff)
+# Install with dev dependencies (black, ruff, pytest)
 uv sync --extra dev
 
 # Run detection on all PDFs in data/papers/
@@ -36,6 +36,9 @@ uv run black src/ main.py --line-length 100
 uv run ruff check src/ main.py
 uv run ruff check src/ main.py --fix     # Auto-fix linting issues
 
+# Run tests
+uv run pytest tests/ -v
+
 # Caption matching benchmark
 uv run python -m src.benchmark annotate --input data/output/paper1
 uv run python -m src.benchmark annotate-batch --input data/output --vlm openai
@@ -49,22 +52,59 @@ uv run python -m src.benchmark report --inputs eval1.json eval2.json --output co
 
 **Pipeline Flow**: PDF → Images (PyMuPDF) → Detection (DocLayout-YOLO) → JSON Results → Visualization → (Optional) Figure/Table Extraction
 
-**Core Modules** (in `src/`):
-- `pdf_converter.py` - PDFConverter: PDF to PNG conversion using PyMuPDF/fitz
-- `layout_detector.py` - DocLayoutDetector with factory function `create_detector()` for instantiation
-- `result_processor.py` - ResultProcessor: Structures detection results, calculates statistics, outputs JSON
-- `visualizer.py` - Visualizer: Draws bounding boxes with class-specific colors and labels (BGR format)
-- `figure_table_extractor.py` - FigureTableExtractor with CaptionMatcher: Crops figures/tables and matches captions by spatial proximity
-- `benchmark.py` - Caption matching benchmark CLI: VLM annotation and evaluation
-- `caption_matching/` - Caption matching evaluation module:
-  - `evaluator.py` - CaptionMatchingEvaluator: Single-document evaluation against VLM ground truth
-  - `benchmark.py` - CaptionMatchingBenchmark, BatchEvaluator: Batch evaluation on benchmark datasets
-  - `reporter.py` - BenchmarkReporter: JSON and Markdown report generation
-- `vlm_annotator/` - VLM-assisted annotation for ground truth generation
+**Module Structure** (in `src/`):
+
+```
+src/
+├── __init__.py                    # Public API exports (v2.0.0)
+├── core/                          # Core processing modules
+│   ├── pdf_converter.py           # PDFConverter: PDF to PNG conversion
+│   ├── layout_detector.py         # DocLayoutDetector with create_detector()
+│   ├── result_processor.py        # ResultProcessor: JSON output
+│   └── figure_extractor.py        # FigureTableExtractor: crops figures/tables
+├── matching/                      # Caption matching module
+│   ├── caption_matcher.py         # CaptionMatcher: spatial proximity matching
+│   └── types.py                   # SearchDirection, ExtractedItem, ExtractionResult
+├── visualization/                 # Visualization module
+│   ├── renderer.py                # BoundingBoxRenderer with strategy pattern
+│   ├── styles.py                  # LabelStrategy, ColorPalette
+│   └── legend.py                  # LegendRenderer
+├── benchmark/                     # Benchmark evaluation module
+│   ├── cli.py                     # CLI entry point
+│   ├── commands/                  # CLI subcommands
+│   │   ├── annotate.py            # VLM annotation commands
+│   │   ├── build.py               # Dataset building
+│   │   ├── evaluate.py            # Evaluation commands
+│   │   ├── validate.py            # Dataset validation
+│   │   └── report.py              # Report generation
+│   ├── dataset.py                 # AnnotationDataset, GroundTruthMatch
+│   ├── evaluator.py               # CaptionMatchingEvaluator
+│   ├── batch_evaluator.py         # CaptionMatchingBenchmark, BatchEvaluator
+│   └── reporter.py                # BenchmarkReporter
+└── vlm_annotator/                 # VLM-assisted annotation
+    ├── annotator.py               # Main annotator using visualization.renderer
+    └── clients/                   # VLM API clients (ollama, openai, anthropic)
+```
 
 **Configuration**: `config/config.yaml` contains model settings, device preferences, path mappings, class definitions, and visualization colors (BGR format for OpenCV).
 
 **Entry Point**: `main.py` orchestrates the pipeline with CLI argument handling.
+
+## Public API
+
+```python
+from src import (
+    # Core
+    PDFConverter, create_detector, DocLayoutDetector, Detection,
+    ResultProcessor, FigureTableExtractor,
+    # Matching
+    CaptionMatcher, SearchDirection, ExtractedItem, ExtractionResult,
+    # Visualization
+    BoundingBoxRenderer, create_visualizer, ColorPalette,
+    LabelStrategy, ClassNameLabelStrategy, NumberedLabelStrategy,
+    LegendRenderer, Visualizer,  # Visualizer is backward compat alias
+)
+```
 
 ## Detection Classes
 
@@ -115,3 +155,11 @@ benchmark/
 2. Generate VLM annotations with `annotate-batch` or `annotate` command
 3. Build benchmark dataset with `build`
 4. Run evaluation with `evaluate`
+
+## Tests
+
+Test files are located in `tests/`:
+- `tests/test_matching/` - CaptionMatcher tests
+- `tests/test_visualization/` - Renderer and strategy tests
+
+Run with: `uv run pytest tests/ -v`
