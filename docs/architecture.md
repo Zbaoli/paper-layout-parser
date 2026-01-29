@@ -1,6 +1,6 @@
 # PDF Layout Parser 架构文档
 
-> 版本: 2.0.0
+> 版本: 2.1.0
 
 ## 概述
 
@@ -16,7 +16,7 @@ PDF → 图像转换 → 布局检测 → JSON 结果 → 可视化 → (可选)
 ## 模块结构
 
 ```
-src/
+src/doclayout/               # 核心包 (pip install doclayout)
 ├── __init__.py              # 公共 API
 ├── core/                    # 核心处理
 │   ├── pdf_converter.py     # PDF → PNG
@@ -24,26 +24,31 @@ src/
 │   ├── result_processor.py  # 结果处理
 │   └── figure_extractor.py  # 图表提取
 ├── matching/                # 标题匹配
-│   ├── caption_matcher.py   # 空间proximity匹配算法
+│   ├── caption_matcher.py   # 空间 proximity 匹配算法
 │   └── types.py             # 数据类型定义
-├── visualization/           # 可视化
-│   ├── renderer.py          # 统一渲染器 (策略模式)
-│   ├── styles.py            # 标签策略、颜色
-│   └── legend.py            # 图例生成
-├── benchmark/               # 基准测试
+└── visualization/           # 可视化
+    ├── renderer.py          # 统一渲染器 (策略模式)
+    ├── styles.py            # 标签策略、颜色
+    └── legend.py            # 图例生成
+
+benchmarks/                  # 评测工具 (不打包)
+├── caption_matching/        # 标题匹配评测
 │   ├── cli.py               # CLI 入口
-│   ├── commands/            # 子命令
+│   ├── commands/            # 子命令 (annotate, build, evaluate, validate, report)
+│   ├── dataset.py           # 数据集管理
 │   ├── evaluator.py         # 评估器
+│   ├── batch_evaluator.py   # 批量评估
 │   └── reporter.py          # 报告生成
-└── vlm_annotator/           # VLM 标注
-    ├── annotator.py         # 标注器
-    └── clients/             # API 客户端
+└── tools/
+    └── vlm_annotator/       # VLM 标注工具
+        ├── annotator.py     # 标注器
+        └── *.py             # API 客户端 (ollama, openai, anthropic)
 ```
 
 ## 公共 API
 
 ```python
-from src import (
+from doclayout import (
     # 核心
     PDFConverter,              # PDF 转图像
     create_detector,           # 创建检测器 (工厂函数)
@@ -93,9 +98,9 @@ DocLayout-YOLO 检测 10 类元素：
 # 主程序
 uv run python main.py --single-pdf input.pdf --extract
 
-# 基准测试
-uv run python -m src.benchmark evaluate --dataset benchmark/caption-matching
-uv run python -m src.benchmark annotate --input data/output/paper1 --vlm ollama
+# 评测工具
+uv run python -m benchmarks.caption_matching evaluate
+uv run python -m benchmarks.caption_matching annotate --input data/output/paper1 --vlm ollama
 ```
 
 ## 配置
@@ -106,15 +111,21 @@ uv run python -m src.benchmark annotate --input data/output/paper1 --vlm ollama
 - 路径映射
 - 可视化颜色 (BGR 格式)
 
-## 输出结构
+## 数据目录
 
 ```
-data/output/{pdf_name}/
-├── pages/                   # 转换的页面图像
-├── annotated/               # 标注可视化
-├── extractions/             # 提取的图表
-│   ├── figures/
-│   ├── tables/
-│   └── extraction_metadata.json
-└── result.json              # 检测结果
+data/
+├── papers/                  # 输入 PDF
+├── output/{pdf_name}/       # 检测输出
+│   ├── pages/               # 转换的页面图像
+│   ├── annotated/           # 标注可视化
+│   ├── extractions/         # 提取的图表
+│   │   ├── figures/
+│   │   ├── tables/
+│   │   └── extraction_metadata.json
+│   └── result.json          # 检测结果
+└── benchmark/               # 评测数据集
+    └── caption-matching/
+        ├── dataset.json
+        └── annotations/
 ```
