@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from .dataset import AnnotationDataset, GroundTruthMatch
+from .metrics import calculate_precision_recall_f1
 
 
 @dataclass
@@ -263,7 +264,7 @@ class CaptionMatchingEvaluator:
             if matched_pred:
                 pred_caption_bbox = matched_pred.get("caption_bbox")
                 if pred_caption_bbox:
-                    pred_caption_id = f"matched (IoU-based)"
+                    pred_caption_id = "matched (IoU-based)"
 
             # Check if caption matches
             is_correct, caption_iou = self._check_caption_match(
@@ -316,7 +317,7 @@ class CaptionMatchingEvaluator:
                     result.false_negatives += 1
 
         # Calculate overall metrics
-        result.precision, result.recall, result.f1 = self._calculate_metrics(
+        result.precision, result.recall, result.f1 = calculate_precision_recall_f1(
             result.true_positives,
             result.false_positives,
             result.false_negatives,
@@ -331,18 +332,6 @@ class CaptionMatchingEvaluator:
 
         return result
 
-    def _calculate_metrics(
-        self,
-        tp: int,
-        fp: int,
-        fn: int,
-    ) -> Tuple[float, float, float]:
-        """Calculate precision, recall, and F1 score."""
-        precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
-        recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-        f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
-        return precision, recall, f1
-
     def _calculate_type_metrics(
         self,
         comparisons: List[MatchComparison],
@@ -356,7 +345,7 @@ class CaptionMatchingEvaluator:
         fn = sum(1 for c in comparisons if c.error_type == "false_negative")
         correct = sum(1 for c in comparisons if c.is_correct)
 
-        precision, recall, f1 = self._calculate_metrics(tp, fp, fn)
+        precision, recall, f1 = calculate_precision_recall_f1(tp, fp, fn)
         accuracy = correct / len(comparisons)
 
         return {

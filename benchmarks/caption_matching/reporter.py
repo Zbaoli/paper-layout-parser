@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
-from .batch_evaluator import BenchmarkSummary
+from .batch import BenchmarkSummary
 
 
 class BenchmarkReporter:

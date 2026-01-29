@@ -33,11 +33,13 @@ src/doclayout/               # 核心包 (pip install doclayout)
 
 benchmarks/                  # 评测工具 (不打包)
 ├── caption_matching/        # 标题匹配评测
-│   ├── cli.py               # CLI 入口
-│   ├── commands/            # 子命令 (annotate, build, evaluate, validate, report)
-│   ├── dataset.py           # 数据集管理
-│   ├── evaluator.py         # 评估器
-│   ├── batch_evaluator.py   # 批量评估
+│   ├── cli.py               # CLI 入口 (所有命令)
+│   ├── dataset.py           # 标注数据集
+│   ├── evaluator.py         # 单文档评估器
+│   ├── batch.py             # 批量评估器
+│   ├── manifest.py          # 数据集清单
+│   ├── builder.py           # 数据集构建器
+│   ├── metrics.py           # 共享指标计算
 │   └── reporter.py          # 报告生成
 └── tools/
     └── vlm_annotator/       # VLM 标注工具
