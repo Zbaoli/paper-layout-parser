@@ -16,11 +16,15 @@ from typing import Optional
 import yaml
 from tqdm import tqdm
 
-from src.pdf_converter import PDFConverter
-from src.layout_detector import create_detector, Detection
-from src.result_processor import ResultProcessor
-from src.visualizer import Visualizer
-from src.figure_table_extractor import FigureTableExtractor, SearchDirection
+from src import (
+    PDFConverter,
+    create_detector,
+    Detection,
+    ResultProcessor,
+    Visualizer,
+    FigureTableExtractor,
+    SearchDirection,
+)
 
 
 def load_config(config_path: str = "config/config.yaml") -> dict:

@@ -1,6 +1,6 @@
 [project]
 name = "pdf-layout-detection"
-version = "1.1.0"
+version = "2.0.0"
 description = "PDF Document Layout Detection using DocLayout-YOLO"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -35,9 +35,13 @@ vlm = [
     "openai>=1.0.0",
     "anthropic>=0.18.0",
 ]
+labelstudio = [
+    "minio>=7.2.0",
+]
 
 [project.scripts]
 yolo-layout = "main:main"
+caption-benchmark = "src.benchmark.cli:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -57,3 +61,10 @@ ignore = ["E501"]
 [tool.black]
 line-length = 100
 target-version = ["py310"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
