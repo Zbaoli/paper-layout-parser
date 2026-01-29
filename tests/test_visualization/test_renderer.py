@@ -8,7 +8,7 @@ import pytest
 import numpy as np
 from typing import Dict, List, Any
 
-from src.visualization import (
+from doclayout.visualization import (
     BoundingBoxRenderer,
     ClassNameLabelStrategy,
     NumberedLabelStrategy,
@@ -214,13 +214,13 @@ class TestBackwardCompatibility:
 
     def test_visualizer_import(self):
         """Test that Visualizer alias works from main package."""
-        from src import Visualizer
+        from doclayout import Visualizer
         viz = Visualizer()
         # Visualizer is now an alias for BoundingBoxRenderer
         assert viz is not None
 
     def test_annotation_renderer_alias(self):
         """Test that AnnotationRenderer alias still works."""
-        from src.vlm_annotator import AnnotationRenderer
+        from benchmarks.tools.vlm_annotator import AnnotationRenderer
         # AnnotationRenderer is now an alias for BoundingBoxRenderer
         assert AnnotationRenderer is BoundingBoxRenderer

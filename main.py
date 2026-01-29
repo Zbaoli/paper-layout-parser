@@ -16,7 +16,7 @@ from typing import Optional
 import yaml
 from tqdm import tqdm
 
-from src import (
+from doclayout import (
     PDFConverter,
     create_detector,
     Detection,

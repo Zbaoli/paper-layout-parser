@@ -7,8 +7,8 @@ Tests the caption matching algorithm against various scenarios.
 import pytest
 from typing import Dict, List, Any
 
-# Import from new matching module
-from src.matching import CaptionMatcher, SearchDirection
+# Import from doclayout matching module
+from doclayout.matching import CaptionMatcher, SearchDirection
 
 
 class TestCaptionMatcherInit:

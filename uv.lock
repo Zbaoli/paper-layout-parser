@@ -757,6 +757,63 @@ wheels = [
 ]
 
 [[package]]
+name = "doclayout"
+version = "2.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "datasets" },
+    { name = "doclayout-yolo" },
+    { name = "huggingface-hub" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.tuna.tsinghua.edu.cn/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.4.1", source = { registry = "https://pypi.tuna.tsinghua.edu.cn/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "opencv-python" },
+    { name = "pillow" },
+    { name = "pymupdf" },
+    { name = "python-dotenv" },
+    { name = "pyyaml" },
+    { name = "tqdm" },
+    { name = "ultralytics" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "black" },
+    { name = "pytest" },
+    { name = "ruff" },
+]
+labelstudio = [
+    { name = "minio" },
+]
+vlm = [
+    { name = "anthropic" },
+    { name = "httpx" },
+    { name = "openai" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "anthropic", marker = "extra == 'vlm'", specifier = ">=0.18.0" },
+    { name = "black", marker = "extra == 'dev'", specifier = ">=23.0.0" },
+    { name = "datasets", specifier = "<4.0" },
+    { name = "doclayout-yolo", specifier = ">=0.0.2" },
+    { name = "httpx", marker = "extra == 'vlm'", specifier = ">=0.25.0" },
+    { name = "huggingface-hub", specifier = ">=0.20.0" },
+    { name = "minio", marker = "extra == 'labelstudio'", specifier = ">=7.2.0" },
+    { name = "numpy", specifier = ">=1.24.0" },
+    { name = "openai", marker = "extra == 'vlm'", specifier = ">=1.0.0" },
+    { name = "opencv-python", specifier = ">=4.8.0" },
+    { name = "pillow", specifier = ">=10.0.0" },
+    { name = "pymupdf", specifier = ">=1.24.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0.0" },
+    { name = "python-dotenv", specifier = ">=1.0.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
+    { name = "tqdm", specifier = ">=4.65.0" },
+    { name = "ultralytics", specifier = ">=8.0.0" },
+]
+provides-extras = ["dev", "vlm", "labelstudio"]
+
+[[package]]
 name = "doclayout-yolo"
 version = "0.0.4"
 source = { registry = "https://pypi.tuna.tsinghua.edu.cn/simple" }
@@ -2202,63 +2259,6 @@ sdist = { url = "https://pypi.tuna.tsinghua.edu.cn/packages/4c/b2/bb8e495d5262bf
 wheels = [
     { url = "https://pypi.tuna.tsinghua.edu.cn/packages/32/2b/121e912bd60eebd623f873fd090de0e84f322972ab25a7f9044c056804ed/pathspec-1.0.3-py3-none-any.whl", hash = "sha256:e80767021c1cc524aa3fb14bedda9c34406591343cc42797b386ce7b9354fb6c", size = 55021, upload-time = "2026-01-09T15:46:44.652Z" },
 ]
-
-[[package]]
-name = "pdf-layout-detection"
-version = "2.0.0"
-source = { editable = "." }
-dependencies = [
-    { name = "datasets" },
-    { name = "doclayout-yolo" },
-    { name = "huggingface-hub" },
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.tuna.tsinghua.edu.cn/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "numpy", version = "2.4.1", source = { registry = "https://pypi.tuna.tsinghua.edu.cn/simple" }, marker = "python_full_version >= '3.11'" },
-    { name = "opencv-python" },
-    { name = "pillow" },
-    { name = "pymupdf" },
-    { name = "python-dotenv" },
-    { name = "pyyaml" },
-    { name = "tqdm" },
-    { name = "ultralytics" },
-]
-
-[package.optional-dependencies]
-dev = [
-    { name = "black" },
-    { name = "pytest" },
-    { name = "ruff" },
-]
-labelstudio = [
-    { name = "minio" },
-]
-vlm = [
-    { name = "anthropic" },
-    { name = "httpx" },
-    { name = "openai" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "anthropic", marker = "extra == 'vlm'", specifier = ">=0.18.0" },
-    { name = "black", marker = "extra == 'dev'", specifier = ">=23.0.0" },
-    { name = "datasets", specifier = "<4.0" },
-    { name = "doclayout-yolo", specifier = ">=0.0.2" },
-    { name = "httpx", marker = "extra == 'vlm'", specifier = ">=0.25.0" },
-    { name = "huggingface-hub", specifier = ">=0.20.0" },
-    { name = "minio", marker = "extra == 'labelstudio'", specifier = ">=7.2.0" },
-    { name = "numpy", specifier = ">=1.24.0" },
-    { name = "openai", marker = "extra == 'vlm'", specifier = ">=1.0.0" },
-    { name = "opencv-python", specifier = ">=4.8.0" },
-    { name = "pillow", specifier = ">=10.0.0" },
-    { name = "pymupdf", specifier = ">=1.24.0" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0.0" },
-    { name = "python-dotenv", specifier = ">=1.0.0" },
-    { name = "pyyaml", specifier = ">=6.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
-    { name = "tqdm", specifier = ">=4.65.0" },
-    { name = "ultralytics", specifier = ">=8.0.0" },
-]
-provides-extras = ["dev", "vlm", "labelstudio"]
 
 [[package]]
 name = "pillow"
