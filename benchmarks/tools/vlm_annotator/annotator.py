@@ -18,8 +18,8 @@ load_dotenv()
 
 from .base import BaseVLMClient, VLMResponse
 
-# Import from unified visualization module
-from ..visualization import BoundingBoxRenderer, NumberedLabelStrategy, LegendRenderer
+# Import from doclayout visualization module
+from doclayout.visualization import BoundingBoxRenderer, NumberedLabelStrategy, LegendRenderer
 
 
 @dataclass

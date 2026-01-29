@@ -91,8 +91,8 @@ def register_parser(subparsers):
 
 def run(args):
     """Run single document VLM annotation."""
-    from ...vlm_annotator import CaptionAnnotator
-    from ...vlm_annotator.annotator import create_vlm_client
+    from benchmarks.tools.vlm_annotator import CaptionAnnotator
+    from benchmarks.tools.vlm_annotator.annotator import create_vlm_client
 
     input_path = Path(args.input)
 
@@ -161,8 +161,8 @@ def run_batch(args):
     """Run batch VLM annotation."""
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
-    from ...vlm_annotator import CaptionAnnotator
-    from ...vlm_annotator.annotator import create_vlm_client
+    from benchmarks.tools.vlm_annotator import CaptionAnnotator
+    from benchmarks.tools.vlm_annotator.annotator import create_vlm_client
 
     input_path = Path(args.input)
 

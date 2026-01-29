@@ -31,7 +31,7 @@ def register_parser(subparsers):
     report_parser.add_argument(
         "--output",
         type=str,
-        default="benchmark/caption-matching/results/comparison.md",
+        default="data/benchmark/caption-matching/results/comparison.md",
         help="Output path for comparison report",
     )
 

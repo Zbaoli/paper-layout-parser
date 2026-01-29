@@ -15,7 +15,7 @@ def register_parser(subparsers):
     validate_parser.add_argument(
         "--dataset",
         type=str,
-        default="benchmark/caption-matching",
+        default="data/benchmark/caption-matching",
         help="Path to benchmark dataset directory",
     )
 

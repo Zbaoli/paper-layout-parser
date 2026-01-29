@@ -19,7 +19,7 @@ def register_parser(subparsers):
     eval_parser.add_argument(
         "--dataset",
         type=str,
-        default="benchmark/caption-matching",
+        default="data/benchmark/caption-matching",
         help="Path to benchmark dataset directory",
     )
     eval_parser.add_argument(

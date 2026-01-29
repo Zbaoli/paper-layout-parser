@@ -19,16 +19,16 @@ def main():
         epilog="""
 Examples:
   # VLM annotation
-  uv run python -m src.benchmark annotate --input data/output/paper1
-  uv run python -m src.benchmark annotate-batch --input data/output
+  uv run python -m benchmarks.caption_matching annotate --input data/output/paper1
+  uv run python -m benchmarks.caption_matching annotate-batch --input data/output
 
   # Build and evaluate benchmark
-  uv run python -m src.benchmark build --input "data/output/*/caption_annotations.json"
-  uv run python -m src.benchmark evaluate --dataset benchmark/caption-matching
-  uv run python -m src.benchmark validate --dataset benchmark/caption-matching
+  uv run python -m benchmarks.caption_matching build --input "data/output/*/caption_annotations.json"
+  uv run python -m benchmarks.caption_matching evaluate
+  uv run python -m benchmarks.caption_matching validate
 
   # Generate reports
-  uv run python -m src.benchmark report --inputs eval1.json eval2.json
+  uv run python -m benchmarks.caption_matching report --inputs eval1.json eval2.json
 """,
     )
 

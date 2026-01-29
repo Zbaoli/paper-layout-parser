@@ -23,7 +23,7 @@ def register_parser(subparsers):
     build_parser.add_argument(
         "--output",
         type=str,
-        default="benchmark/caption-matching",
+        default="data/benchmark/caption-matching",
         help="Output directory for benchmark dataset",
     )
     build_parser.add_argument(
