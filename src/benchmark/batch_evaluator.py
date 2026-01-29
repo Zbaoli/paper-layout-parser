@@ -1,5 +1,5 @@
 """
-Caption Matching Benchmark
+Caption Matching Benchmark - Batch Evaluator
 
 Provides batch evaluation capabilities for caption matching algorithm
 using VLM-generated ground truth datasets.
@@ -232,6 +232,8 @@ class DatasetBuilder:
         Returns:
             CaptionBenchmarkDataset instance
         """
+        import shutil
+
         output_path = Path(output_dir)
         annotations_dir = output_path / "annotations"
         annotations_dir.mkdir(parents=True, exist_ok=True)
@@ -259,8 +261,6 @@ class DatasetBuilder:
 
             # Copy or reference annotation file
             if copy_files:
-                import shutil
-
                 dest_ann = doc_dir / "caption_annotations.json"
                 shutil.copy(ann_file, dest_ann)
                 ann_rel_path = f"annotations/{pdf_name}/caption_annotations.json"
@@ -273,8 +273,6 @@ class DatasetBuilder:
             if extraction_path.exists():
                 if copy_files:
                     dest_ext = doc_dir / "extraction_metadata.json"
-                    import shutil
-
                     shutil.copy(extraction_path, dest_ext)
                     ext_rel_path = f"annotations/{pdf_name}/extraction_metadata.json"
                 else:

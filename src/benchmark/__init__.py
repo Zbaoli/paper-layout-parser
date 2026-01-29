@@ -1,11 +1,16 @@
 """
-Caption Matching Evaluation Module
+Benchmark Module
 
-Provides tools for evaluating caption matching algorithm accuracy
-against VLM-generated ground truth.
+Caption matching benchmark evaluation tools including:
+- VLM-assisted annotation
+- Benchmark dataset building
+- Evaluation against ground truth
+- Report generation
 """
 
-from .benchmark import (
+from .dataset import AnnotationDataset, GroundTruthMatch, merge_datasets
+from .evaluator import CaptionMatchingEvaluator, EvaluationResult, MatchComparison
+from .batch_evaluator import (
     BatchEvaluator,
     BenchmarkSummary,
     CaptionBenchmarkDataset,
@@ -14,22 +19,22 @@ from .benchmark import (
     DocumentEntry,
     DocumentResult,
 )
-from .dataset import AnnotationDataset, GroundTruthMatch
-from .evaluator import CaptionMatchingEvaluator, EvaluationResult
 from .reporter import BenchmarkReporter, load_summary_from_json
 
 __all__ = [
     # Dataset
     "AnnotationDataset",
     "GroundTruthMatch",
+    "merge_datasets",
     # Evaluator
     "CaptionMatchingEvaluator",
     "EvaluationResult",
-    # Benchmark
-    "CaptionBenchmarkDataset",
-    "CaptionMatchingBenchmark",
+    "MatchComparison",
+    # Batch Evaluator
     "BatchEvaluator",
     "BenchmarkSummary",
+    "CaptionBenchmarkDataset",
+    "CaptionMatchingBenchmark",
     "DatasetBuilder",
     "DocumentEntry",
     "DocumentResult",

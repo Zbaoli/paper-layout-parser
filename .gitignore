@@ -15,8 +15,8 @@ data/output/
 
 label_studio_export/
 
-# Benchmark data
-benchmark/
+# Benchmark data (root level only)
+/benchmark/
 
 # Models (large files)
 models/*.pt
