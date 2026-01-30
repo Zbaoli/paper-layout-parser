@@ -221,6 +221,6 @@ class TestBackwardCompatibility:
 
     def test_annotation_renderer_alias(self):
         """Test that AnnotationRenderer alias still works."""
-        from benchmarks.tools.vlm_annotator import AnnotationRenderer
+        from benchmarks.vlm_annotator import AnnotationRenderer
         # AnnotationRenderer is now an alias for BoundingBoxRenderer
         assert AnnotationRenderer is BoundingBoxRenderer
