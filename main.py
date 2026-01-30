@@ -21,7 +21,9 @@ from doclayout import (
     create_detector,
     Detection,
     ResultProcessor,
-    Visualizer,
+    BoundingBoxRenderer,
+    create_visualizer,
+    LegendRenderer,
     FigureTableExtractor,
     SearchDirection,
 )
@@ -41,7 +43,7 @@ def process_pdf(
     converter: PDFConverter,
     detector,
     processor: ResultProcessor,
-    visualizer: Optional[Visualizer],
+    visualizer: Optional[BoundingBoxRenderer],
     extractor: Optional[FigureTableExtractor],
     output_dir: str,
     pages_subdir: str = "pages",
@@ -117,7 +119,14 @@ def process_pdf(
     if visualizer:
         print(f"  Generating visualizations...")
         annotated_dir.mkdir(parents=True, exist_ok=True)
-        viz_paths = visualizer.visualize_document(page_results, str(annotated_dir))
+        viz_paths = []
+        for page_result in page_results:
+            image_path = page_result["image_path"]
+            detections = page_result["detections"]
+            page_num = page_result["page_number"]
+            output_path = annotated_dir / f"page_{page_num:04d}_annotated.png"
+            visualizer.render_image(image_path, detections, str(output_path))
+            viz_paths.append(str(output_path))
         print(f"  Saved {len(viz_paths)} visualization images")
 
     # Step 6: Extract figures and tables (if enabled)
@@ -240,18 +249,21 @@ Examples:
     print(f"  Result Processor initialized")
 
     visualizer = None
+    legend_renderer = None
     if visualize:
         viz_config = config.get("visualization", {})
-        visualizer = Visualizer(
+        visualizer = create_visualizer(
+            style="class_name",
             line_thickness=viz_config.get("line_thickness", 2),
             font_scale=viz_config.get("font_scale", 0.6),
             show_confidence=viz_config.get("show_confidence", True),
         )
+        legend_renderer = LegendRenderer()
         print(f"  Visualizer initialized")
         # Save legend to output directory
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
-        legend_path = visualizer.save_legend(str(output_path / "legend.png"))
+        legend_path = legend_renderer.save_legend(str(output_path / "legend.png"))
         print(f"  Legend saved to: {legend_path}")
 
     extractor = None
