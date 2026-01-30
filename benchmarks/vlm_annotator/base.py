@@ -152,3 +152,80 @@ class BaseVLMClient(ABC):
         json_str = re.sub(r",\s*]", "]", json_str)
         json_str = re.sub(r",\s*}", "}", json_str)
         return json_str
+
+    def _parse_response(
+        self,
+        raw_response: str,
+        figures: List[Dict[str, Any]],
+        tables: List[Dict[str, Any]],
+        captions: List[Dict[str, Any]],
+    ) -> "VLMResponse":
+        """
+        Parse VLM response and extract matches.
+
+        Args:
+            raw_response: Raw text response from the VLM
+            figures: List of figure detections
+            tables: List of table detections
+            captions: List of caption detections
+
+        Returns:
+            VLMResponse with parsed matches
+        """
+        import json
+
+        try:
+            # Try to extract JSON from the response
+            json_str = raw_response.strip()
+
+            # Handle markdown code blocks
+            if "```json" in json_str:
+                json_str = json_str.split("```json")[1].split("```")[0]
+            elif "```" in json_str:
+                json_str = json_str.split("```")[1].split("```")[0]
+
+            # Find JSON object
+            start_idx = json_str.find("{")
+            end_idx = json_str.rfind("}") + 1
+            if start_idx >= 0 and end_idx > start_idx:
+                json_str = json_str[start_idx:end_idx]
+
+            # Fix trailing commas (common LLM issue)
+            json_str = self._fix_json_trailing_commas(json_str)
+
+            data = json.loads(json_str)
+
+            matches = []
+            for m in data.get("matches", []):
+                fig_id = m.get("figure_id")
+                fig_type = m.get("figure_type", "figure")
+                cap_id = m.get("caption_id")
+
+                if fig_id is not None:
+                    matches.append(
+                        VLMMatch(
+                            figure_id=fig_id,
+                            figure_type=fig_type,
+                            caption_id=cap_id,
+                            confidence=m.get("confidence", 1.0),
+                            reasoning=m.get("reasoning"),
+                        )
+                    )
+
+            unmatched = data.get("unmatched_captions", [])
+
+            return VLMResponse(
+                success=True,
+                matches=matches,
+                unmatched_captions=unmatched,
+                raw_response=raw_response,
+                model=self.client_name,
+            )
+
+        except json.JSONDecodeError as e:
+            return VLMResponse(
+                success=False,
+                error=f"Failed to parse VLM response as JSON: {e}",
+                raw_response=raw_response,
+                model=self.client_name,
+            )
