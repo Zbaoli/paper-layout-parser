@@ -14,6 +14,7 @@ uv sync
 uv sync --extra dev         # With dev dependencies (black, ruff, pytest)
 uv sync --extra vlm         # With VLM dependencies (for benchmark annotation)
 uv sync --extra labelstudio # With Label Studio/MinIO integration
+uv sync --extra dev --extra vlm  # Multiple extras together
 
 # Run detection
 uv run python main.py                                    # All PDFs in data/papers/
@@ -89,3 +90,10 @@ DocLayout-YOLO detects 10 classes: Title, Plain-Text, Abandon, Figure, Figure-Ca
 ## Configuration
 
 `config/config.yaml` contains model settings, device preferences, extraction parameters, and visualization colors (BGR format for OpenCV).
+
+## VLM Annotator Environment Variables
+
+For benchmark VLM annotation (`uv run python -m benchmarks annotate`):
+- `VLM_MODEL`: Model name (e.g., "gpt-4o", "claude-sonnet-4-20250514", "ollama/llava:13b")
+- `VLM_API_KEY`: API key (falls back to `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`)
+- `VLM_API_BASE`: Base URL for third-party OpenAI-compatible APIs (e.g., SiliconFlow, DeepSeek)
