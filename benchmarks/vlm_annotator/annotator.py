@@ -16,10 +16,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from .base import BaseVLMClient, VLMResponse
-
 # Import from doclayout visualization module
-from doclayout.visualization import BoundingBoxRenderer, NumberedLabelStrategy, LegendRenderer
+from doclayout.visualization import BoundingBoxRenderer, NumberedLabelStrategy
+
+from .base import BaseVLMClient, VLMResponse
 
 
 @dataclass
@@ -275,8 +275,12 @@ class CaptionAnnotator:
                 caption_indices.append(i)
 
         # Assign IDs and use pre-extracted caption text
-        figures_with_id = [{"id": i + 1, "bbox": f["bbox"], "item_type": "figure"} for i, f in enumerate(figures)]
-        tables_with_id = [{"id": i + 1, "bbox": t["bbox"], "item_type": "table"} for i, t in enumerate(tables)]
+        figures_with_id = [
+            {"id": i + 1, "bbox": f["bbox"], "item_type": "figure"} for i, f in enumerate(figures)
+        ]
+        tables_with_id = [
+            {"id": i + 1, "bbox": t["bbox"], "item_type": "table"} for i, t in enumerate(tables)
+        ]
         captions_with_id = []
 
         for i, cap in enumerate(captions):
@@ -349,8 +353,12 @@ class CaptionAnnotator:
                 captions.append(det)
 
         # Assign IDs and extract caption text
-        figures_with_id = [{"id": i + 1, "bbox": f["bbox"], "item_type": "figure"} for i, f in enumerate(figures)]
-        tables_with_id = [{"id": i + 1, "bbox": t["bbox"], "item_type": "table"} for i, t in enumerate(tables)]
+        figures_with_id = [
+            {"id": i + 1, "bbox": f["bbox"], "item_type": "figure"} for i, f in enumerate(figures)
+        ]
+        tables_with_id = [
+            {"id": i + 1, "bbox": t["bbox"], "item_type": "table"} for i, t in enumerate(tables)
+        ]
         captions_with_id = []
 
         for i, cap in enumerate(captions):
@@ -513,32 +521,50 @@ class CaptionAnnotator:
 
 
 def create_vlm_client(
-    backend: str = "ollama",
     model: Optional[str] = None,
+    api_key: Optional[str] = None,
+    api_base: Optional[str] = None,
     **kwargs,
 ) -> BaseVLMClient:
     """
     Factory function to create a VLM client.
 
+    Uses LiteLLM for unified multi-provider support. Configuration priority:
+    parameters > VLM_* env vars > provider-native env vars > defaults.
+
     Args:
-        backend: VLM backend ("ollama", "openai", or "anthropic")
-        model: Model name (optional, uses default for backend)
-        **kwargs: Additional client configuration
+        model: Model name (or set VLM_MODEL env var, default: gpt-4o)
+            - OpenAI: "gpt-4o", "gpt-4-turbo"
+            - Anthropic: "claude-sonnet-4-20250514"
+            - Ollama: "ollama/llava:13b"
+            - Third-party: "openai/model-name" with api_base
+        api_key: API key (or set VLM_API_KEY env var)
+        api_base: API base URL for third-party providers (or set VLM_API_BASE env var)
+        **kwargs: Additional client configuration (max_tokens, temperature, etc.)
 
     Returns:
         Configured VLM client
+
+    Examples:
+        # Use environment variables (recommended)
+        client = create_vlm_client()  # reads VLM_MODEL, VLM_API_KEY, VLM_API_BASE
+
+        # OpenAI
+        client = create_vlm_client(model="gpt-4o")
+
+        # Anthropic
+        client = create_vlm_client(model="claude-sonnet-4-20250514")
+
+        # Ollama (local)
+        client = create_vlm_client(model="ollama/llava:13b")
+
+        # SiliconFlow (third-party)
+        client = create_vlm_client(
+            model="openai/Qwen/Qwen2-VL-72B-Instruct",
+            api_base="https://api.siliconflow.cn/v1",
+            api_key="your-key",
+        )
     """
-    if backend == "ollama":
-        from .ollama_client import OllamaClient
+    from .litellm_client import LiteLLMClient
 
-        return OllamaClient(model=model, **kwargs)
-    elif backend == "openai":
-        from .openai_client import OpenAIClient
-
-        return OpenAIClient(model=model, **kwargs)
-    elif backend == "anthropic":
-        from .anthropic_client import AnthropicClient
-
-        return AnthropicClient(model=model, **kwargs)
-    else:
-        raise ValueError(f"Unknown VLM backend: {backend}")
+    return LiteLLMClient(model=model, api_key=api_key, api_base=api_base, **kwargs)
