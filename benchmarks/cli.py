@@ -20,8 +20,14 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # VLM annotation
+  # VLM annotation (direct mode - recommended)
+  uv run python -m benchmarks annotate --pdf data/papers/paper1.pdf
+  uv run python -m benchmarks annotate --pdf data/papers/paper1.pdf --output data/output/paper1
+
+  # VLM annotation (legacy detection mode)
   uv run python -m benchmarks annotate --input data/output/paper1
+
+  # Batch annotation
   uv run python -m benchmarks annotate-batch --input data/output
 
   # Build and evaluate benchmark
@@ -75,11 +81,19 @@ def _register_annotate_parser(subparsers):
     annotate_parser = subparsers.add_parser(
         "annotate", help="Generate ground truth annotations using VLM"
     )
+    # Direct mode (recommended) - takes PDF directly
+    annotate_parser.add_argument(
+        "--pdf",
+        type=str,
+        default=None,
+        help="Path to PDF file for direct annotation (recommended mode)",
+    )
+    # Legacy mode - takes detection output directory
     annotate_parser.add_argument(
         "--input",
         type=str,
-        required=True,
-        help="Path to PDF output directory (containing result.json and pages/)",
+        default=None,
+        help="[Legacy] Path to PDF output directory (containing result.json and pages/)",
     )
     annotate_parser.add_argument(
         "--model",
@@ -103,13 +117,24 @@ def _register_annotate_parser(subparsers):
         "--output",
         type=str,
         default=None,
-        help="Output path for annotations (default: <input>/caption_annotations.json)",
+        help="Output directory for annotations (default: data/benchmark/<pdf_name>/)",
     )
     annotate_parser.add_argument(
-        "--pdf",
-        type=str,
-        default=None,
-        help="Path to original PDF (for text extraction, optional)",
+        "--no-visualize",
+        action="store_true",
+        help="Skip generating visualization images",
+    )
+    annotate_parser.add_argument(
+        "--max-workers",
+        type=int,
+        default=5,
+        help="Maximum concurrent page processing (default: 5)",
+    )
+    annotate_parser.add_argument(
+        "--rate-limit",
+        type=int,
+        default=10,
+        help="Maximum concurrent API calls for rate limiting (default: 10)",
     )
 
     # Batch annotation
@@ -157,6 +182,12 @@ def _register_annotate_parser(subparsers):
         default=5,
         help="Maximum concurrent pages per document (default: 5)",
     )
+    annotate_batch_parser.add_argument(
+        "--rate-limit",
+        type=int,
+        default=10,
+        help="Maximum concurrent API calls for rate limiting (default: 10)",
+    )
 
 
 def _run_annotate(args):
@@ -164,19 +195,12 @@ def _run_annotate(args):
     from benchmarks.vlm_annotator import CaptionAnnotator
     from benchmarks.vlm_annotator.annotator import create_vlm_client
 
-    input_path = Path(args.input)
-
-    # Find detection result
-    result_file = input_path / "result.json"
-    if not result_file.exists():
-        print(f"Detection result not found: {result_file}")
-        print("Run detection first with: uv run python main.py --single-pdf <pdf>")
-        sys.exit(1)
-
-    # Find pages directory
-    pages_dir = input_path / "pages"
-    if not pages_dir.exists():
-        print(f"Pages directory not found: {pages_dir}")
+    # Validate arguments
+    if not args.pdf and not args.input:
+        print("Error: Either --pdf (recommended) or --input (legacy) is required")
+        print("\nUsage:")
+        print("  Direct mode:  uv run python -m benchmarks annotate --pdf data/papers/paper.pdf")
+        print("  Legacy mode:  uv run python -m benchmarks annotate --input data/output/paper")
         sys.exit(1)
 
     # Create VLM client
@@ -198,29 +222,88 @@ def _run_annotate(args):
     print(f"Using model: {vlm_client.client_name}")
 
     # Create annotator
-    annotator = CaptionAnnotator(vlm_client)
-
-    # Run annotation
-    print(f"Processing: {input_path}")
-    result = annotator.annotate_from_detection(
-        detection_result_path=str(result_file),
-        pages_dir=str(pages_dir),
-        output_dir=str(input_path),
-        pdf_path=args.pdf,
+    annotator = CaptionAnnotator(
+        vlm_client,
+        max_workers=args.max_workers,
+        rate_limit=args.rate_limit,
     )
 
-    # Print summary
-    print("\n" + "=" * 50)
-    print("Annotation Complete")
-    print("=" * 50)
-    print(f"PDF: {result.pdf_name}")
-    print(f"Pages processed: {len(result.pages)}")
+    # Direct mode (recommended)
+    if args.pdf:
+        pdf_path = Path(args.pdf)
+        if not pdf_path.exists():
+            print(f"PDF not found: {pdf_path}")
+            sys.exit(1)
 
-    total_matches = sum(len(p.matches) for p in result.pages)
-    print(f"Total matches found: {total_matches}")
+        print(f"[Direct Mode] Processing: {pdf_path}")
+        result = annotator.annotate_from_pdf(
+            pdf_path=str(pdf_path),
+            output_dir=args.output,
+            visualize=not args.no_visualize,
+        )
 
-    output_file = input_path / "caption_annotations.json"
-    print(f"\nAnnotations saved to: {output_file}")
+        # Print summary
+        print("\n" + "=" * 50)
+        print("Annotation Complete (Direct Mode)")
+        print("=" * 50)
+        print(f"PDF: {result.pdf_name}")
+        print(f"Pages processed: {len(result.pages)}")
+
+        total_elements = sum(len(p.elements) for p in result.pages)
+        total_matches = sum(len(p.matches) for p in result.pages)
+        print(f"Total elements found: {total_elements}")
+        print(f"Total matches found: {total_matches}")
+
+        if args.output:
+            output_file = Path(args.output) / "caption_annotations.json"
+        else:
+            output_file = Path("data/benchmark") / pdf_path.stem / "caption_annotations.json"
+        print(f"\nAnnotations saved to: {output_file}")
+
+    # Detection mode (YOLO bbox + VLM matching)
+    else:
+        input_path = Path(args.input)
+
+        # Find detection result
+        result_file = input_path / "result.json"
+        if not result_file.exists():
+            print(f"Detection result not found: {result_file}")
+            print("Run detection first with: uv run python main.py --single-pdf <pdf>")
+            print("\nOr use direct mode:")
+            print("  uv run python -m benchmarks annotate --pdf <path-to-pdf>")
+            sys.exit(1)
+
+        # Find pages directory
+        pages_dir = input_path / "pages"
+        if not pages_dir.exists():
+            print(f"Pages directory not found: {pages_dir}")
+            sys.exit(1)
+
+        # Determine output directory (default: data/benchmark/<pdf_name>/)
+        if args.output:
+            output_dir = Path(args.output)
+        else:
+            output_dir = Path("data/benchmark") / input_path.name
+
+        print(f"[Detection Mode] Processing: {input_path}")
+        result = annotator.annotate_from_detection(
+            detection_result_path=str(result_file),
+            pages_dir=str(pages_dir),
+            output_dir=str(output_dir),
+        )
+
+        # Print summary
+        print("\n" + "=" * 50)
+        print("Annotation Complete (Detection Mode)")
+        print("=" * 50)
+        print(f"PDF: {result.pdf_name}")
+        print(f"Pages processed: {len(result.pages)}")
+
+        total_matches = sum(len(p.matches) for p in result.pages)
+        print(f"Total matches found: {total_matches}")
+
+        output_file = output_dir / "caption_annotations.json"
+        print(f"\nAnnotations saved to: {output_file}")
 
 
 def _run_annotate_batch(args):
@@ -274,8 +357,12 @@ def _run_annotate_batch(args):
             return (pdf_dir.name, False, 0, "Pages directory not found")
 
         try:
-            # Create annotator with page-level concurrency
-            annotator = CaptionAnnotator(vlm_client, max_workers=args.concurrent_pages)
+            # Create annotator with page-level concurrency and rate limiting
+            annotator = CaptionAnnotator(
+                vlm_client,
+                max_workers=args.concurrent_pages,
+                rate_limit=args.rate_limit,
+            )
             result = annotator.annotate_from_detection(
                 detection_result_path=str(result_file),
                 pages_dir=str(pages_dir),

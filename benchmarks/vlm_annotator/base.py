@@ -13,6 +13,29 @@ from typing import Any, Dict, List, Optional
 
 
 @dataclass
+class VLMElement:
+    """Represents an element identified by VLM in direct annotation mode."""
+
+    id: int
+    type: str  # "figure", "table", or "caption"
+    description: Optional[str] = None  # VLM's description of figures/tables
+    text: Optional[str] = None  # Caption text content
+    bbox: Optional[Dict[str, int]] = None  # {"x1", "y1", "x2", "y2"} normalized coords (0-1000)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        result = {
+            "id": self.id,
+            "type": self.type,
+            "description": self.description,
+            "text": self.text,
+        }
+        if self.bbox:
+            result["bbox"] = self.bbox
+        return result
+
+
+@dataclass
 class VLMMatch:
     """Represents a single figure/table to caption match identified by VLM."""
 
@@ -21,6 +44,45 @@ class VLMMatch:
     caption_id: Optional[int]  # C1, C2, ... -> 1, 2, ... or None if no match
     confidence: float = 1.0
     reasoning: Optional[str] = None
+
+
+@dataclass
+class VLMDirectResponse:
+    """Response from VLM direct analysis (no pre-detection required)."""
+
+    success: bool
+    elements: List[VLMElement] = field(default_factory=list)
+    matches: List[VLMMatch] = field(default_factory=list)
+    unmatched_figures: List[int] = field(default_factory=list)
+    unmatched_tables: List[int] = field(default_factory=list)
+    unmatched_captions: List[int] = field(default_factory=list)
+    raw_response: str = ""
+    model: str = ""
+    error: Optional[str] = None
+    error_details: Optional[Dict[str, Any]] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "success": self.success,
+            "elements": [e.to_dict() for e in self.elements],
+            "matches": [
+                {
+                    "figure_id": m.figure_id,
+                    "figure_type": m.figure_type,
+                    "caption_id": m.caption_id,
+                    "confidence": m.confidence,
+                    "reasoning": m.reasoning,
+                }
+                for m in self.matches
+            ],
+            "unmatched_figures": self.unmatched_figures,
+            "unmatched_tables": self.unmatched_tables,
+            "unmatched_captions": self.unmatched_captions,
+            "model": self.model,
+            "error": self.error,
+            "error_details": self.error_details,
+        }
 
 
 @dataclass
@@ -33,6 +95,7 @@ class VLMResponse:
     raw_response: str = ""
     model: str = ""
     error: Optional[str] = None
+    error_details: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -51,6 +114,7 @@ class VLMResponse:
             "unmatched_captions": self.unmatched_captions,
             "model": self.model,
             "error": self.error,
+            "error_details": self.error_details,
         }
 
 
@@ -97,6 +161,22 @@ class BaseVLMClient(ABC):
 
         Returns:
             VLMResponse with matches and analysis results
+        """
+        pass
+
+    @abstractmethod
+    def analyze_page_direct(self, image_path: str) -> "VLMDirectResponse":
+        """
+        Directly analyze a raw page image without pre-detection metadata.
+
+        This method enables VLM to identify all figures, tables, and captions
+        independently, without relying on YOLO detection results.
+
+        Args:
+            image_path: Path to the raw page image (not annotated)
+
+        Returns:
+            VLMDirectResponse with identified elements and matches
         """
         pass
 
@@ -224,6 +304,89 @@ class BaseVLMClient(ABC):
 
         except json.JSONDecodeError as e:
             return VLMResponse(
+                success=False,
+                error=f"Failed to parse VLM response as JSON: {e}",
+                raw_response=raw_response,
+                model=self.client_name,
+            )
+
+    def _parse_direct_response(self, raw_response: str) -> "VLMDirectResponse":
+        """
+        Parse VLM direct response and extract elements and matches.
+
+        Args:
+            raw_response: Raw text response from the VLM
+
+        Returns:
+            VLMDirectResponse with parsed elements and matches
+        """
+        import json
+
+        try:
+            # Try to extract JSON from the response
+            json_str = raw_response.strip()
+
+            # Handle markdown code blocks
+            if "```json" in json_str:
+                json_str = json_str.split("```json")[1].split("```")[0]
+            elif "```" in json_str:
+                json_str = json_str.split("```")[1].split("```")[0]
+
+            # Find JSON object
+            start_idx = json_str.find("{")
+            end_idx = json_str.rfind("}") + 1
+            if start_idx >= 0 and end_idx > start_idx:
+                json_str = json_str[start_idx:end_idx]
+
+            # Fix trailing commas (common LLM issue)
+            json_str = self._fix_json_trailing_commas(json_str)
+
+            data = json.loads(json_str)
+
+            # Parse elements
+            elements = []
+            for e in data.get("elements", []):
+                elements.append(
+                    VLMElement(
+                        id=e.get("id"),
+                        type=e.get("type"),
+                        description=e.get("description"),
+                        text=e.get("text"),
+                        bbox=e.get("bbox"),
+                    )
+                )
+
+            # Parse matches
+            matches = []
+            for m in data.get("matches", []):
+                fig_id = m.get("figure_id")
+                fig_type = m.get("figure_type", "figure")
+                cap_id = m.get("caption_id")
+
+                if fig_id is not None:
+                    matches.append(
+                        VLMMatch(
+                            figure_id=fig_id,
+                            figure_type=fig_type,
+                            caption_id=cap_id,
+                            confidence=m.get("confidence", 1.0),
+                            reasoning=m.get("reasoning"),
+                        )
+                    )
+
+            return VLMDirectResponse(
+                success=True,
+                elements=elements,
+                matches=matches,
+                unmatched_figures=data.get("unmatched_figures", []),
+                unmatched_tables=data.get("unmatched_tables", []),
+                unmatched_captions=data.get("unmatched_captions", []),
+                raw_response=raw_response,
+                model=self.client_name,
+            )
+
+        except json.JSONDecodeError as e:
+            return VLMDirectResponse(
                 success=False,
                 error=f"Failed to parse VLM response as JSON: {e}",
                 raw_response=raw_response,

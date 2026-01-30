@@ -4,7 +4,11 @@ VLM Prompt Templates
 Contains prompt templates for figure-caption matching analysis.
 """
 
-# System prompt for the VLM
+# =============================================================================
+# Detection-based annotation prompts (legacy mode)
+# =============================================================================
+
+# System prompt for the VLM (detection-based mode)
 SYSTEM_PROMPT = """You are an expert document analysis assistant specialized in \
 understanding academic papers and technical documents. Your task is to analyze \
 document pages and identify which captions belong to which figures or tables.
@@ -28,6 +32,17 @@ Guidelines for matching:
 5. A caption may have no corresponding figure/table (if the figure is on another page)
 
 Be conservative: if you're not confident about a match, indicate lower confidence."""
+
+# =============================================================================
+# Direct annotation prompts (no pre-detection required)
+# =============================================================================
+
+DIRECT_SYSTEM_PROMPT = """You are a document analysis expert. Your task is to analyze \
+document pages to identify all Figures, Tables, and their Captions, then establish \
+matching relationships between them.
+
+You work directly with raw document page images without any pre-processing or detection.
+Your analysis serves as ground truth for evaluating automated detection systems."""
 
 # User prompt template
 USER_PROMPT_TEMPLATE = """Analyze this document page and match figures/tables to their captions.
@@ -126,3 +141,70 @@ def build_user_prompt(
     """
     elements_desc = format_elements_description(figures, tables, captions)
     return USER_PROMPT_TEMPLATE.format(elements_description=elements_desc)
+
+
+# =============================================================================
+# Direct annotation prompt builder
+# =============================================================================
+
+DIRECT_USER_PROMPT = """Analyze this document page and complete the following tasks:
+
+1. Identify all visual elements:
+   - Figure: images, charts, diagrams, plots, photographs, illustrations, etc.
+   - Table: data tables with rows and columns
+   - Caption: figure or table captions (typically starting with "Figure X", "Fig. X", \
+"Table X", "Tab. X", or similar patterns)
+
+2. For each element, provide its bounding box:
+   - Use normalized coordinates in range 0-1000
+   - Format: {"x1": left, "y1": top, "x2": right, "y2": bottom}
+   - Coordinates are relative to image dimensions (0=top/left edge, 1000=bottom/right edge)
+
+3. Establish matching relationships:
+   - Pair each Figure/Table with its corresponding Caption
+   - If a Figure/Table has no Caption on this page, mark it as unmatched
+   - If a Caption has no corresponding Figure/Table on this page, mark it as unmatched
+
+Important guidelines:
+- Captions are typically positioned directly below or above their corresponding figure/table
+- Caption text usually contains a numbering pattern like "Figure 1", "Fig. 1", "Table 1"
+- Be thorough: identify ALL figures, tables, and captions on the page
+- Be accurate: only create matches when you are confident about the relationship
+- Provide accurate bounding boxes that tightly enclose each element
+
+Output in JSON format:
+{
+  "elements": [
+    {"id": 1, "type": "figure", "description": "Bar chart showing experimental results", "bbox": {"x1": 100, "y1": 150, "x2": 900, "y2": 500}},
+    {"id": 2, "type": "caption", "text": "Figure 1: Experimental results comparison", "bbox": {"x1": 100, "y1": 510, "x2": 900, "y2": 550}},
+    {"id": 3, "type": "table", "description": "Data summary table with 5 columns", "bbox": {"x1": 50, "y1": 600, "x2": 950, "y2": 850}},
+    {"id": 4, "type": "caption", "text": "Table 1: Summary of experimental data", "bbox": {"x1": 50, "y1": 860, "x2": 950, "y2": 900}}
+  ],
+  "matches": [
+    {"figure_id": 1, "figure_type": "figure", "caption_id": 2},
+    {"figure_id": 3, "figure_type": "table", "caption_id": 4}
+  ],
+  "unmatched_figures": [],
+  "unmatched_tables": [],
+  "unmatched_captions": []
+}
+
+Notes:
+- Element IDs should be unique integers starting from 1
+- Each element MUST include a "bbox" field with normalized coordinates (0-1000)
+- In "matches", figure_id refers to the element ID of a figure or table
+- In "matches", figure_type should be "figure" or "table"
+- In "matches", caption_id refers to the element ID of the matched caption
+- Unmatched lists contain element IDs of items without matches on this page
+
+Respond ONLY with the JSON object, no additional text."""
+
+
+def build_direct_user_prompt() -> str:
+    """
+    Build the user prompt for direct VLM analysis (no pre-detection).
+
+    Returns:
+        Complete user prompt string for direct annotation mode
+    """
+    return DIRECT_USER_PROMPT
