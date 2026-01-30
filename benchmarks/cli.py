@@ -82,17 +82,22 @@ def _register_annotate_parser(subparsers):
         help="Path to PDF output directory (containing result.json and pages/)",
     )
     annotate_parser.add_argument(
-        "--vlm",
-        type=str,
-        default="ollama",
-        choices=["ollama", "openai", "anthropic"],
-        help="VLM backend to use (default: ollama)",
-    )
-    annotate_parser.add_argument(
         "--model",
         type=str,
         default=None,
-        help="Model name (default: backend-specific default)",
+        help="Model name, or set VLM_MODEL env var (default: gpt-4o)",
+    )
+    annotate_parser.add_argument(
+        "--api-key",
+        type=str,
+        default=None,
+        help="API key, or set VLM_API_KEY env var",
+    )
+    annotate_parser.add_argument(
+        "--api-base",
+        type=str,
+        default=None,
+        help="API base URL for third-party providers, or set VLM_API_BASE env var",
     )
     annotate_parser.add_argument(
         "--output",
@@ -118,17 +123,22 @@ def _register_annotate_parser(subparsers):
         help="Path to data/output directory containing processed PDFs",
     )
     annotate_batch_parser.add_argument(
-        "--vlm",
-        type=str,
-        default="ollama",
-        choices=["ollama", "openai", "anthropic"],
-        help="VLM backend to use",
-    )
-    annotate_batch_parser.add_argument(
         "--model",
         type=str,
         default=None,
-        help="Model name (default: backend-specific default)",
+        help="Model name, or set VLM_MODEL env var (default: gpt-4o)",
+    )
+    annotate_batch_parser.add_argument(
+        "--api-key",
+        type=str,
+        default=None,
+        help="API key, or set VLM_API_KEY env var",
+    )
+    annotate_batch_parser.add_argument(
+        "--api-base",
+        type=str,
+        default=None,
+        help="API base URL for third-party providers, or set VLM_API_BASE env var",
     )
     annotate_batch_parser.add_argument(
         "--skip-existing",
@@ -170,23 +180,19 @@ def _run_annotate(args):
         sys.exit(1)
 
     # Create VLM client
-    print(f"Initializing VLM client: {args.vlm}")
+    print("Initializing VLM client...")
     try:
-        vlm_client = create_vlm_client(backend=args.vlm, model=args.model)
+        vlm_client = create_vlm_client(
+            model=args.model,
+            api_key=args.api_key,
+            api_base=args.api_base,
+        )
     except ImportError as e:
         print(f"Error: {e}")
         print("Install VLM dependencies with: uv sync --extra vlm")
         sys.exit(1)
 
     if not vlm_client.is_available():
-        print(f"VLM backend '{args.vlm}' is not available.")
-        if args.vlm == "ollama":
-            print("Make sure Ollama is running: ollama serve")
-            print("And pull a vision model: ollama pull llava:13b")
-        elif args.vlm == "openai":
-            print("Set OPENAI_API_KEY environment variable or create .env file")
-        elif args.vlm == "anthropic":
-            print("Set ANTHROPIC_API_KEY environment variable or create .env file")
         sys.exit(1)
 
     print(f"Using model: {vlm_client.client_name}")
@@ -240,25 +246,21 @@ def _run_annotate_batch(args):
         sys.exit(0)
 
     print(f"Found {len(pdf_dirs)} documents to annotate")
-    print(f"VLM backend: {args.vlm}")
     print(f"Concurrency: {args.concurrent_docs} docs x {args.concurrent_pages} pages")
 
     # Create VLM client
     try:
-        vlm_client = create_vlm_client(backend=args.vlm, model=args.model)
+        vlm_client = create_vlm_client(
+            model=args.model,
+            api_key=args.api_key,
+            api_base=args.api_base,
+        )
     except ImportError as e:
         print(f"Error: {e}")
         print("Install VLM dependencies with: uv sync --extra vlm")
         sys.exit(1)
 
     if not vlm_client.is_available():
-        print(f"VLM backend '{args.vlm}' is not available.")
-        if args.vlm == "ollama":
-            print("Make sure Ollama is running: ollama serve")
-        elif args.vlm == "openai":
-            print("Set OPENAI_API_KEY environment variable")
-        elif args.vlm == "anthropic":
-            print("Set ANTHROPIC_API_KEY environment variable")
         sys.exit(1)
 
     print(f"Using model: {vlm_client.client_name}")
