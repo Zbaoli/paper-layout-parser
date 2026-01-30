@@ -21,16 +21,16 @@ def main():
         epilog="""
 Examples:
   # VLM annotation
-  uv run python -m benchmarks.caption_matching annotate --input data/output/paper1
-  uv run python -m benchmarks.caption_matching annotate-batch --input data/output
+  uv run python -m benchmarks annotate --input data/output/paper1
+  uv run python -m benchmarks annotate-batch --input data/output
 
   # Build and evaluate benchmark
-  uv run python -m benchmarks.caption_matching build --input "data/output/*/caption_annotations.json"
-  uv run python -m benchmarks.caption_matching evaluate
-  uv run python -m benchmarks.caption_matching validate
+  uv run python -m benchmarks build --input "data/output/*/caption_annotations.json"
+  uv run python -m benchmarks evaluate
+  uv run python -m benchmarks validate
 
   # Generate reports
-  uv run python -m benchmarks.caption_matching report --inputs eval1.json eval2.json
+  uv run python -m benchmarks report --inputs eval1.json eval2.json
 """,
     )
 
@@ -151,8 +151,8 @@ def _register_annotate_parser(subparsers):
 
 def _run_annotate(args):
     """Run single document VLM annotation."""
-    from benchmarks.tools.vlm_annotator import CaptionAnnotator
-    from benchmarks.tools.vlm_annotator.annotator import create_vlm_client
+    from benchmarks.vlm_annotator import CaptionAnnotator
+    from benchmarks.vlm_annotator.annotator import create_vlm_client
 
     input_path = Path(args.input)
 
@@ -219,8 +219,8 @@ def _run_annotate(args):
 
 def _run_annotate_batch(args):
     """Run batch VLM annotation."""
-    from benchmarks.tools.vlm_annotator import CaptionAnnotator
-    from benchmarks.tools.vlm_annotator.annotator import create_vlm_client
+    from benchmarks.vlm_annotator import CaptionAnnotator
+    from benchmarks.vlm_annotator.annotator import create_vlm_client
 
     input_path = Path(args.input)
 
@@ -349,7 +349,7 @@ def _register_build_parser(subparsers):
 
 def _run_build(args):
     """Run dataset build command."""
-    from .builder import DatasetBuilder
+    from benchmarks.caption_evaluator.builder import DatasetBuilder
 
     # Expand glob patterns
     annotation_files = []
@@ -460,9 +460,9 @@ def _register_evaluate_parser(subparsers):
 
 def _run_evaluate(args):
     """Run benchmark evaluation."""
-    from .batch import BatchEvaluator
-    from .manifest import CaptionBenchmarkDataset
-    from .reporter import BenchmarkReporter
+    from benchmarks.caption_evaluator.batch import BatchEvaluator
+    from benchmarks.caption_evaluator.manifest import CaptionBenchmarkDataset
+    from benchmarks.caption_evaluator.reporter import BenchmarkReporter
 
     print(f"Loading dataset from: {args.dataset}")
     print(f"Confidence threshold: {args.confidence}")
@@ -529,8 +529,8 @@ def _run_evaluate(args):
 
 def _run_evaluate_single(args):
     """Run single document evaluation."""
-    from .dataset import AnnotationDataset
-    from .evaluator import CaptionMatchingEvaluator
+    from benchmarks.caption_evaluator.dataset import AnnotationDataset
+    from benchmarks.caption_evaluator.evaluator import CaptionMatchingEvaluator
 
     gt_path = Path(args.ground_truth)
     det_path = Path(args.detection)
@@ -615,7 +615,7 @@ def _register_validate_parser(subparsers):
 
 def _run_validate(args):
     """Run dataset validation."""
-    from .manifest import CaptionBenchmarkDataset
+    from benchmarks.caption_evaluator.manifest import CaptionBenchmarkDataset
 
     def validate_dataset(benchmark_dir: str) -> Dict[str, Any]:
         """Validate dataset integrity."""
@@ -723,7 +723,7 @@ def _register_report_parser(subparsers):
 
 def _run_report(args):
     """Run comparison report generation."""
-    from .reporter import BenchmarkReporter, load_summary_from_json
+    from benchmarks.caption_evaluator.reporter import BenchmarkReporter, load_summary_from_json
 
     # Load summaries
     summaries = []
